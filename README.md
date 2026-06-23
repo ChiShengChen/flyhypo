@@ -15,6 +15,12 @@ Markdown report.
 > claim traces to a specific connectivity number or a specific paper. When
 > evidence is thin, the tool says so and lowers confidence — it never fabricates.
 
+![Connectivity graph for EPG](docs/graph.png)
+
+*Connectivity graph (from the web UI) for `EPG` — the structural evidence the
+hypotheses are grounded in: top-8 upstream partners → EPG → top-8 downstream
+partners, edge thickness ∝ synapse weight, with synapse counts and cell counts `n`.*
+
 ---
 
 ## How it works
@@ -77,6 +83,8 @@ A minimal local web UI (stdlib-only, same `.env` tokens) wraps the CLI:
 ```bash
 uv run flyhypo-web            # → http://127.0.0.1:8000
 ```
+
+![flyhypo web UI — full EPG report](docs/screenshot.png)
 
 Type a cell type, pick **Full** or **Fingerprint only**, and the page renders:
 
