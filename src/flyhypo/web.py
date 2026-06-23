@@ -177,7 +177,7 @@ function roiTable(title, rois){
   s.appendChild(el("h2",null,title));
   if(!rois || !rois.length){ s.appendChild(el("div","muted","none")); return s; }
   const t = el("table");
-  t.innerHTML = "<tr><th>ROI</th><th style='text-align:right'>synapses</th></tr>";
+  t.innerHTML = "<tr><th>ROI</th><th style='text-align:right'>sites</th></tr>";
   for(const r of rois){
     const tr=el("tr"); tr.appendChild(el("td",null,r.roi));
     tr.appendChild(el("td","num", (r.weight).toLocaleString())); t.appendChild(tr);
@@ -189,7 +189,7 @@ function partnerTable(title, ps){
   const s = el("section"); s.appendChild(el("h2",null,title));
   if(!ps || !ps.length){ s.appendChild(el("div","muted","none")); return s; }
   const t = el("table");
-  t.innerHTML="<tr><th>type</th><th>cells</th><th style='text-align:right'>synapses</th><th>NT</th><th>class</th></tr>";
+  t.innerHTML="<tr><th>type</th><th>cells (n)</th><th style='text-align:right'>synapse count</th><th>NT</th><th>class</th></tr>";
   for(const p of ps){
     const tr=el("tr");
     tr.appendChild(el("td",null,p.type||"?"));
@@ -212,6 +212,12 @@ function renderFingerprint(fp){
       "<b>type not found</b>") + " · predicted NT: <b>"+(fp.predicted_nt||"unknown")+"</b>";
   head.appendChild(kv);
   if(fp.notes) head.appendChild(el("div","muted",fp.notes));
+  const legend = el("div","muted");
+  legend.style.marginTop = "8px";
+  legend.innerHTML = "Numbers: ROI tables are <b>synaptic <i>site</i> counts</b> "+
+    "(pre/post sites, ∑ over cells); partner <b>synapse count</b> is <b>pairwise</b> "+
+    "(synapses between neuron pairs, ∑ over the type). Structural proxies, not functional strength.";
+  head.appendChild(legend);
   if(fp.suggestions && fp.suggestions.length){
     const sg = el("div","chips suggest"); sg.style.marginTop="10px";
     sg.appendChild(el("span","muted","Did you mean: "));
@@ -221,8 +227,8 @@ function renderFingerprint(fp){
     head.appendChild(sg);
   }
   out.appendChild(head);
-  out.appendChild(roiTable("Top input ROIs (postsynaptic)", fp.input_rois));
-  out.appendChild(roiTable("Top output ROIs (presynaptic)", fp.output_rois));
+  out.appendChild(roiTable("Top input ROIs (postsynaptic sites)", fp.input_rois));
+  out.appendChild(roiTable("Top output ROIs (presynaptic sites)", fp.output_rois));
   out.appendChild(partnerTable("Top upstream partners", fp.upstream));
   out.appendChild(partnerTable("Top downstream partners", fp.downstream));
 }
@@ -327,7 +333,7 @@ function renderGraph(fp){
   s.appendChild(el("h2",null,"Connectivity graph (evidence for the hypotheses)"));
   s.appendChild(el("div","muted",
     "Arrows = synapse direction into / out of "+fp.cell_type_query+
-    "; line thickness ∝ synapse weight; numbers = synapses; n = #cells. Showing top "+
+    "; line thickness ∝ synapse weight; numbers = pairwise synapse count; n = #cells. Showing top "+
     up.length+" upstream / "+down.length+" downstream of "+
     ((fp.upstream||[]).length)+" / "+((fp.downstream||[]).length)+"."));
   const rows=Math.max(up.length,down.length,1);

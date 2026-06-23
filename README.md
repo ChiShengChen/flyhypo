@@ -76,6 +76,19 @@ uv run flyhypo SA1 --fingerprint-only
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 
+> **Tip — pass a cell *type*, not a brain region.** flyhypo resolves cell *types*.
+> Neuropil / region names like `MB` (mushroom body), `EB`, `FB`, `PB` are **ROIs**,
+> not types — so querying one resolves to no cells. The tool detects this, says so,
+> and suggests representative cell types that arborize in that region (e.g. `MB` →
+> Kenyon cells `KCg-m`, `KCab-c`, …; plus the 36 `MBON…` output neurons). Pass an
+> actual type instead: `KCg-m`, `MBON01`, `EPG`. Unknown/typo'd types fall back to
+> fuzzy name suggestions.
+
+> **Tip — what the numbers mean.** ROI tables show **synaptic *site* counts**
+> (pre/post sites summed over the cells); partner `w` / "synapse count" is the
+> **pairwise synapse count** (synapses between neuron pairs, summed over the type).
+> Both are structural proxies — not functional strength, sign, or reliability.
+
 ### Web UI
 
 A minimal local web UI (stdlib-only, same `.env` tokens) wraps the CLI:

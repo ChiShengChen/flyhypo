@@ -47,6 +47,13 @@ def render_markdown(h: Hypothesis) -> str:
 
     # --- fingerprint ---------------------------------------------------- #
     L.append("## Structural fingerprint")
+    L.append(
+        "> **Reading the numbers:** ROI weights are **synaptic *site* counts** "
+        "(pre/post sites summed over the cells); partner `w` is the **pairwise "
+        "synapse count** (synapses between neuron pairs, summed over the type). "
+        "Both are structural proxies — not functional strength."
+    )
+    L.append("")
     L.append(f"- **Predicted neurotransmitter:** {fp.predicted_nt or 'unknown'}")
     if fp.input_rois:
         rois = ", ".join(f"{r.roi} ({r.weight})" for r in fp.input_rois)
@@ -56,7 +63,8 @@ def render_markdown(h: Hypothesis) -> str:
         L.append(f"- **Top output ROIs (presynaptic sites):** {rois}")
     if fp.upstream:
         L.append("")
-        L.append("**Top upstream partners** (type — cells — synapses — NT — class):")
+        L.append("**Top upstream partners** "
+                 "(type — n cells — w = pairwise synapse count — NT — class):")
         for p in fp.upstream:
             L.append(
                 f"- {p.type or '?'} — n={p.n_cells} — w={p.total_weight} — "
@@ -64,7 +72,8 @@ def render_markdown(h: Hypothesis) -> str:
             )
     if fp.downstream:
         L.append("")
-        L.append("**Top downstream partners** (type — cells — synapses — NT — class):")
+        L.append("**Top downstream partners** "
+                 "(type — n cells — w = pairwise synapse count — NT — class):")
         for p in fp.downstream:
             L.append(
                 f"- {p.type or '?'} — n={p.n_cells} — w={p.total_weight} — "
