@@ -1,0 +1,24 @@
+[project]
+name = "flyhypo"
+version = "0.1.0"
+description = "PoC: generate grounded, falsifiable functional hypotheses for Drosophila neuron cell types from connectome structure + literature + an LLM."
+readme = "README.md"
+authors = [
+    { name = "ChiShengChen", email = "m50816m50816@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "google-genai>=2.9.0",
+    "neuprint-python>=0.6.2",
+    "paper-search-mcp>=0.1.3",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+]
+
+[project.scripts]
+flyhypo = "flyhypo:main"
+flyhypo-web = "flyhypo.web:main"
+
+[build-system]
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
