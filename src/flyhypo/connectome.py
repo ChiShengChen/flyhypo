@@ -20,7 +20,13 @@ from collections import Counter
 
 import pandas as pd
 from dotenv import load_dotenv
-from neuprint import Client, NeuronCriteria, fetch_neurons, fetch_simple_connections
+from neuprint import (
+    Client,
+    NeuronCriteria,
+    fetch_all_rois,
+    fetch_neurons,
+    fetch_simple_connections,
+)
 from neuprint.client import default_client, set_default_client
 
 from . import cache
@@ -80,6 +86,40 @@ def list_all_types(client: Client, dataset: str) -> list[str]:
     types = [t for t in df["type"].tolist() if t]
     cache.put("types", dataset, types)
     return types
+
+
+def _roi_base(roi: str) -> str:
+    """Strip side/compartment suffix: 'MB(+ACA)(R)' -> 'MB'."""
+    return roi.split("(")[0].strip()
+
+
+def find_matching_roi(client: Client, query: str) -> str | None:
+    """If `query` names a brain region (ROI) rather than a cell type, return the
+    best-matching ROI name (preferring the right-hemisphere, un-compartmented one)."""
+    try:
+        rois = fetch_all_rois(client=client)
+    except Exception:
+        return None
+    q = query.lower()
+    exact = [r for r in rois if _roi_base(r).lower() == q]
+    if not exact:
+        return None
+    # Prefer a "(R)" ROI, then one without "+compartment", then the shortest.
+    exact.sort(key=lambda r: (not r.endswith("(R)"), "+" in r, len(r)))
+    return exact[0]
+
+
+def types_in_roi(client: Client, roi: str, limit: int = 8) -> list[str]:
+    """Representative cell types that arborize in `roi`, busiest first."""
+    cypher = (
+        f"MATCH (n:Neuron) WHERE n.type IS NOT NULL AND n.`{roi}` IS NOT NULL "
+        f"RETURN n.type AS type, count(*) AS ncells "
+        f"ORDER BY ncells DESC LIMIT {int(limit)}"
+    )
+    try:
+        return client.fetch_custom(cypher)["type"].tolist()
+    except Exception:
+        return []
 
 
 def _aggregate_rois(roi_counts: pd.DataFrame, primary: set[str], kind: str,
@@ -183,17 +223,37 @@ def build_fingerprint(
     # --- not found → fuzzy-suggest -------------------------------------- #
     if neurons is None or neurons.empty:
         all_types = list_all_types(client, dataset)
-        suggestions = difflib.get_close_matches(cell_type, all_types, n=8, cutoff=0.4)
-        if not suggestions:  # substring fallback
+        name_sugg = difflib.get_close_matches(cell_type, all_types, n=8, cutoff=0.4)
+        if not name_sugg:  # substring fallback
             low = cell_type.lower()
-            suggestions = [t for t in all_types if low in t.lower()][:8]
+            name_sugg = [t for t in all_types if low in t.lower()][:8]
+
+        # Common confusion: the query is a brain REGION (ROI), not a cell type
+        # (e.g. "MB" = mushroom body). Detect it and suggest cell types that
+        # actually arborize there, which name-similarity alone would miss (KCs).
+        roi = find_matching_roi(client, cell_type)
+        region_note = ""
+        suggestions = name_sugg
+        if roi:
+            region_types = types_in_roi(client, roi, 8)
+            merged: list[str] = []
+            for t in region_types + name_sugg:
+                if t not in merged:
+                    merged.append(t)
+            suggestions = merged[:8]
+            region_note = (
+                f" Note: '{cell_type}' is a brain region (ROI '{roi}') in this "
+                f"dataset, not a cell type — a region name resolves to no single "
+                f"cell. Suggestions are representative cell types arborizing in {roi}."
+            )
+
         fp = StructuralFingerprint(
             cell_type_query=cell_type,
             dataset=dataset,
             suggestions=suggestions,
             notes=(
                 f"No neurons of type '{cell_type}' found in {dataset}. "
-                f"Showing {len(suggestions)} nearest type name(s)."
+                f"Showing {len(suggestions)} suggestion(s)." + region_note
             ),
         )
         if use_cache:
