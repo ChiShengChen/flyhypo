@@ -152,8 +152,10 @@ region → cell type, each grounded in refs + connectivity:*
 
 ![flyhypo web UI — hierarchy mode](docs/hierarchy.png)
 
-Type a cell type (or a numeric bodyId), pick **Full**, **Hierarchy** (region ▸
-subregion ▸ umbrella ▸ cell type ▸ neuron), or **Fingerprint only**, and the page
+Type a cell type (or a numeric bodyId) and pick a **Mode** — **Full**, **Hierarchy**
+(region ▸ subregion ▸ umbrella ▸ cell type ▸ neuron), **Replicate** (cross-dataset
+motif), or **Fingerprint only**. Two checkboxes: **Verify** (the second LLM pass)
+and **Cross-dataset** (fold replication into the synthesis as evidence). The page
 renders:
 
 - **functional roles** — the headline answer: the functions this neuron is
@@ -188,6 +190,7 @@ matching the connectome layer — not individual `bodyId`s.
 | `--hierarchy` | Analyze every level (region ▸ subregion ▸ umbrella/system ▸ cell type ▸ neuron), each with functional roles + refs. |
 | `--no-verify` | Skip the LLM verification pass (faster, ~half the tokens; citation hygiene still applied). Web UI: the **Verify** checkbox. |
 | `--replicate [DATASETS]` | Cross-dataset replication of the connectivity motif (structural, no LLM). Default compares vs `male-cns:v1.0,banc:v888`. |
+| `--with-replication` | Fold cross-dataset replication into the LLM synthesis as evidence, so functional roles/hypotheses can cite motifs **conserved across connectomes**. Web UI: the **Cross-dataset** checkbox. |
 | `--fingerprint-only` | Stop after step 1 (no Gemini key needed). |
 | `--no-cache` | Bypass the on-disk query cache. |
 

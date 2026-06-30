@@ -131,6 +131,22 @@ coarse → fine. Set each level's label (the ROI name, the system name you chose
 the type, or the bodyId)."""
 
 
+REPLICATION_RULE = (
+    "\n\nCROSS-DATASET REPLICATION is provided: partner connections that recur "
+    "across independent connectomes (different specimens, even sexes). When a "
+    "role relies on such a partner, CITE the replication in connectivity_basis "
+    "(e.g. 'ER4m→EPG replicates across hemibrain/male-cns/banc'). A conserved "
+    "motif is STRONGER structural evidence — reflect it in confidence — but it "
+    "still says nothing about synapse sign, strength, or neuromodulation."
+)
+
+
+def _replication_block(replication: dict | None) -> str:
+    if not replication:
+        return ""
+    return f"\n\nCROSS-DATASET REPLICATION:\n{json.dumps(replication, default=str)}" + REPLICATION_RULE
+
+
 def _evidence_bundle(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> str:
     return json.dumps(
         {
@@ -186,7 +202,8 @@ def _generate(client: genai.Client, system: str, prompt: str, schema):
 
 
 def synthesize(
-    fp: StructuralFingerprint, lit: list[LiteratureHit], *, verify: bool = True
+    fp: StructuralFingerprint, lit: list[LiteratureHit], *,
+    verify: bool = True, replication: dict | None = None,
 ) -> Hypothesis:
     client = _client()
     bundle = _evidence_bundle(fp, lit)
@@ -219,7 +236,8 @@ def synthesize(
         (
             f"Cell type: {fp.cell_type_query}\nDataset: {fp.dataset}\n\n"
             f"EVIDENCE:\n{bundle}\n\n"
-            "Produce the structured hypothesis analysis." + neuron_addendum
+            "Produce the structured hypothesis analysis."
+            + neuron_addendum + _replication_block(replication)
         ),
         HypothesisAnalysis,
     )
@@ -314,7 +332,8 @@ def synthesize(
 
 
 def synthesize_hierarchy(
-    context: dict, lit: list[LiteratureHit], *, verify: bool = True
+    context: dict, lit: list[LiteratureHit], *,
+    verify: bool = True, replication: dict | None = None,
 ) -> HierarchyReport:
     """One Gemini call → functional roles at every hierarchy level."""
     client = _client()
@@ -329,6 +348,7 @@ def synthesize_hierarchy(
             f"Query: {context.get('query')}\nDataset context below.\n\n"
             f"EVIDENCE:\n{bundle}\n\n"
             "Produce the per-level hierarchical analysis."
+            + _replication_block(replication)
         ),
         HierarchyAnalysis,
     )

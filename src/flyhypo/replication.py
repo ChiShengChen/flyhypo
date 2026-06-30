@@ -65,6 +65,23 @@ def _agreements(summaries: list[DatasetSummary], direction: str):
     return out
 
 
+def replication_evidence(report: ReplicationReport, top: int = 20) -> dict:
+    """Compact replication summary to fold into LLM synthesis as evidence."""
+    return {
+        "datasets": report.datasets,
+        "agreement_vs_base": {
+            ds: {"upstream": report.upstream_agreement.get(ds, 0.0),
+                 "downstream": report.downstream_agreement.get(ds, 0.0)}
+            for ds in report.datasets if ds != report.base_dataset
+        },
+        "replicated_partner_types": [
+            {"type": a.partner_type, "direction": a.direction,
+             "n_datasets": a.n_datasets, "weights": a.weights}
+            for a in report.replicated_partners[:top]
+        ],
+    }
+
+
 def replicate(
     cell_type: str,
     base_dataset: str = connectome.DEFAULT_DATASET,

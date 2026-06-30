@@ -20,9 +20,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import connectome, hierarchy, literature, synthesize
-from .cli import _slug, render_hierarchy_markdown, render_markdown
-from .schema import HierarchyReport, Hypothesis
+from . import connectome, hierarchy, literature, replication, synthesize
+from .cli import (
+    _slug,
+    render_hierarchy_markdown,
+    render_markdown,
+    render_replication_markdown,
+)
+from .schema import HierarchyReport, Hypothesis, ReplicationReport
 
 OUTPUT_DIR = Path("outputs")
 
@@ -127,11 +132,15 @@ PAGE = """<!doctype html>
       <select id="mode">
         <option value="full">Full (structure + literature + LLM)</option>
         <option value="hierarchy">Hierarchy (region▸…▸neuron, all levels)</option>
+        <option value="replicate">Replicate (cross-dataset motif)</option>
         <option value="fingerprint">Fingerprint only (neuPrint)</option>
       </select>
     </label>
     <label title="second LLM pass that downgrades over-stated confidence (slower, more tokens)">Verify
       <span style="display:flex;align-items:center;height:38px"><input type="checkbox" id="verify" checked></span>
+    </label>
+    <label title="fold cross-dataset replication into the synthesis as evidence (full/hierarchy modes; slower)">Cross-dataset
+      <span style="display:flex;align-items:center;height:38px"><input type="checkbox" id="repl"></span>
     </label>
     <button type="submit" id="go">Generate</button>
   </form>
@@ -160,16 +169,18 @@ $("#f").addEventListener("submit", async (ev) => {
   const mode = $("#mode").value;
   const what = mode==="full" ? "full pipeline (neuPrint → PubMed → Gemini ×2)"
              : mode==="hierarchy" ? "multi-level hierarchy (region → neuron)"
+             : mode==="replicate" ? "cross-dataset replication (neuPrint, no LLM)"
              : "neuPrint fingerprint";
   $("#status").innerHTML = '<div class="status">Running '+what+' for <b>'+cell+'</b>… '+
     (mode==="fingerprint"?"":"this can take ~30–60s.")+'</div>';
   try {
     const r = await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({cell_type:cell, dataset:$("#dataset").value.trim(), top_k:+$("#topk").value, mode, verify:$("#verify").checked})});
+      body: JSON.stringify({cell_type:cell, dataset:$("#dataset").value.trim(), top_k:+$("#topk").value, mode, verify:$("#verify").checked, with_replication:$("#repl").checked})});
     const data = await r.json();
     $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
-    if ("levels" in data) { renderHierarchy(data); loadHistory(); }
+    if ("summaries" in data) { renderReplication(data); loadHistory(); }
+    else if ("levels" in data) { renderHierarchy(data); loadHistory(); }
     else { render(data); if ("hypotheses" in data) loadHistory(); }
   } catch (e) {
     $("#status").innerHTML = ""; renderError(String(e));
@@ -316,6 +327,46 @@ function renderHierarchy(d){
     const pre=el("div","muted"); pre.style.whiteSpace="pre-wrap"; pre.textContent=d.reasoning_summary;
     rs.appendChild(pre); $("#out").appendChild(rs);
   }
+}
+
+function replTable(title, items, datasets){
+  const s=el("section"); s.appendChild(el("h2",null,title));
+  if(!items || !items.length){ s.appendChild(el("div","muted","none")); $("#out").appendChild(s); return; }
+  const t=el("table");
+  t.innerHTML="<tr><th>partner</th><th>dir</th>"+
+    datasets.map(d=>"<th style='text-align:right'>"+escapeHtml(d)+"</th>").join("")+"</tr>";
+  items.forEach(a=>{ const tr=el("tr");
+    tr.innerHTML="<td>"+escapeHtml(a.partner_type)+"</td><td>"+a.direction+"</td>"+
+      datasets.map(d=>"<td class='num'>"+(a.weights[d]!=null?Number(a.weights[d]).toLocaleString():"—")+"</td>").join("");
+    t.appendChild(tr);});
+  s.appendChild(t); $("#out").appendChild(s);
+}
+
+function renderReplication(d){
+  $("#out").appendChild(toolbar(d));
+  const others=(d.datasets||[]).filter(x=>x!==d.base_dataset);
+  const s=el("section");
+  s.appendChild(el("h2",null,"Cross-dataset replication: "+d.cell_type));
+  s.appendChild(el("div","muted","Base "+d.base_dataset+" vs "+others.join(", ")+
+    " — does the connectivity motif recur across specimens? Weights still vary across individuals."));
+  const t=el("table");
+  t.innerHTML="<tr><th>dataset</th><th>type found</th><th>cells</th><th>NT</th></tr>";
+  (d.summaries||[]).forEach(su=>{ const tr=el("tr");
+    tr.innerHTML="<td>"+escapeHtml(su.dataset)+"</td><td>"+(su.found?"yes":"<b>no</b>")+
+      "</td><td>"+su.n_cells+"</td><td>"+(su.predicted_nt||"—")+"</td>"; t.appendChild(tr);});
+  s.appendChild(t);
+  const ag=el("div","kv"); ag.style.marginTop="10px";
+  ag.innerHTML="<b>Agreement vs base</b> (Jaccard of top partner-type sets): "+
+    others.map(ds=>escapeHtml(ds)+" — up "+(d.upstream_agreement[ds]||0).toFixed(2)+
+    " / down "+(d.downstream_agreement[ds]||0).toFixed(2)).join(" · ");
+  s.appendChild(ag);
+  $("#out").appendChild(s);
+  replTable("Replicated partners (in ≥2 datasets) — "+(d.replicated_partners||[]).length,
+            d.replicated_partners, d.datasets);
+  replTable("Dataset-specific partners — "+(d.divergent_partners||[]).length,
+            d.divergent_partners, d.datasets);
+  const n=el("section"); n.appendChild(el("h2",null,"Notes"));
+  n.appendChild(el("div","muted",d.notes||"")); $("#out").appendChild(n);
 }
 
 function render(data){
@@ -536,7 +587,9 @@ async function openReport(slug){
     const r = await fetch("/api/report/"+encodeURIComponent(slug));
     const data = await r.json(); $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
-    if ("levels" in data) renderHierarchy(data); else render(data);
+    if ("summaries" in data) renderReplication(data);
+    else if ("levels" in data) renderHierarchy(data);
+    else render(data);
   } catch (e) { $("#status").innerHTML=""; renderError(String(e)); }
   finally { $("#go").disabled = false; }
 }
@@ -609,8 +662,26 @@ class Handler(BaseHTTPRequestHandler):
         top_k = int(req.get("top_k") or 15)
         mode = req.get("mode", "full")
         do_verify = bool(req.get("verify", True))
+        with_repl = bool(req.get("with_replication", False))
         if not cell:
             return {"error": "cell_type is required"}
+
+        # --- cross-dataset replication mode (structural, no LLM) -------- #
+        if mode == "replicate":
+            rep_type = cell
+            if cell.isdigit():
+                nfp = connectome.build_neuron_fingerprint(int(cell), dataset, top_k)
+                if not nfp.neuron_type:
+                    return {"error": f"bodyId {cell} has no type to replicate"}
+                rep_type = nfp.neuron_type
+            report = replication.replicate(rep_type, dataset, None, top_k)
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            slug = _slug(rep_type + "_replication")
+            (OUTPUT_DIR / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
+            (OUTPUT_DIR / f"{slug}.md").write_text(render_replication_markdown(report))
+            payload = report.model_dump(by_alias=True)
+            payload["_markdown"] = render_replication_markdown(report)
+            return payload
 
         # --- multi-level hierarchy mode --------------------------------- #
         if mode == "hierarchy":
@@ -623,7 +694,12 @@ class Handler(BaseHTTPRequestHandler):
                     msg += "; did you mean: " + ", ".join(type_fp.suggestions)
                 return {"error": msg}
             lit = literature.fetch_literature(type_fp)
-            report = synthesize.synthesize_hierarchy(context, lit, verify=do_verify)
+            repl_ev = None
+            if with_repl and context.get("cell_type"):
+                rep = replication.replicate(context["cell_type"], dataset, None, top_k)
+                repl_ev = replication.replication_evidence(rep)
+            report = synthesize.synthesize_hierarchy(
+                context, lit, verify=do_verify, replication=repl_ev)
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             slug = _slug((f"bodyId_{body_id}" if body_id else cell) + "_hierarchy")
             (OUTPUT_DIR / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
@@ -644,7 +720,12 @@ class Handler(BaseHTTPRequestHandler):
                 return {"fingerprint": fp.model_dump(by_alias=True)}
 
         lit = literature.fetch_literature(fp)
-        result = synthesize.synthesize(fp, lit, verify=do_verify)
+        repl_ev = None
+        if with_repl:
+            rep_type = fp.neuron_type or cell
+            rep = replication.replicate(rep_type, dataset, None, top_k)
+            repl_ev = replication.replication_evidence(rep)
+        result = synthesize.synthesize(fp, lit, verify=do_verify, replication=repl_ev)
 
         # Persist like the CLI does, so it shows up in history.
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -664,7 +745,12 @@ class Handler(BaseHTTPRequestHandler):
             return []
         items = []
         for p in OUTPUT_DIR.glob("*.json"):
-            kind = "hierarchy" if p.stem.endswith("_hierarchy") else "report"
+            if p.stem.endswith("_hierarchy"):
+                kind = "hierarchy"
+            elif p.stem.endswith("_replication"):
+                kind = "replication"
+            else:
+                kind = "report"
             items.append({"slug": p.stem, "mtime": p.stat().st_mtime, "kind": kind})
         items.sort(key=lambda x: x["mtime"], reverse=True)
         return items
@@ -691,6 +777,10 @@ class Handler(BaseHTTPRequestHandler):
             report = HierarchyReport.model_validate_json(text)
             payload = report.model_dump(by_alias=True)
             payload["_markdown"] = render_hierarchy_markdown(report)
+        elif slug.endswith("_replication"):
+            rep = ReplicationReport.model_validate_json(text)
+            payload = rep.model_dump(by_alias=True)
+            payload["_markdown"] = render_replication_markdown(rep)
         else:
             result = Hypothesis.model_validate_json(text)
             payload = result.model_dump(by_alias=True)

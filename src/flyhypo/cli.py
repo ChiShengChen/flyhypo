@@ -353,6 +353,12 @@ def main(argv: list[str] | None = None) -> int:
              "LLM). Optional comma-separated datasets; default male-cns:v1.0,banc:v888",
     )
     ap.add_argument(
+        "--with-replication",
+        action="store_true",
+        help="fold cross-dataset replication into the synthesis as evidence "
+             "(roles can cite motifs conserved across connectomes)",
+    )
+    ap.add_argument(
         "--fingerprint-only",
         action="store_true",
         help="stop after the structural fingerprint (step 1; no API keys for LLM)",
@@ -400,7 +406,14 @@ def main(argv: list[str] | None = None) -> int:
                 print("suggestions:", ", ".join(type_fp.suggestions))
             return 2
         lit = literature.fetch_literature(anchor, use_cache=not args.no_cache)
-        report = synthesize.synthesize_hierarchy(context, lit, verify=not args.no_verify)
+        repl_ev = None
+        if args.with_replication and context.get("cell_type"):
+            from . import replication
+            rep = replication.replicate(context["cell_type"], args.dataset, None,
+                                        args.top_k, use_cache=not args.no_cache)
+            repl_ev = replication.replication_evidence(rep)
+        report = synthesize.synthesize_hierarchy(
+            context, lit, verify=not args.no_verify, replication=repl_ev)
 
         out_dir = Path(args.out)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -429,7 +442,16 @@ def main(argv: list[str] | None = None) -> int:
     from . import literature, synthesize
 
     lit = literature.fetch_literature(fp, use_cache=not args.no_cache)
-    result = synthesize.synthesize(fp, lit, verify=not args.no_verify)
+    repl_ev = None
+    if args.with_replication:
+        from . import replication
+        rep_type = fp.neuron_type or args.cell_type
+        if rep_type:
+            rep = replication.replicate(rep_type, args.dataset, None, args.top_k,
+                                        use_cache=not args.no_cache)
+            repl_ev = replication.replication_evidence(rep)
+    result = synthesize.synthesize(
+        fp, lit, verify=not args.no_verify, replication=repl_ev)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
