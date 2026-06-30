@@ -19,6 +19,7 @@ from google.genai import types
 from .schema import (
     HierarchyAnalysis,
     HierarchyReport,
+    HierarchyVerification,
     Hypothesis,
     HypothesisAnalysis,
     LiteratureHit,
@@ -342,11 +343,43 @@ def synthesize_hierarchy(
             if lvl.level == "neuron" and CONFIDENCE_RANK.get(role.confidence, 0) > CONFIDENCE_RANK["low"]:
                 role.confidence = "low"
 
-    notes = (
-        "Per-level roles are grounded in the evidence; citation hygiene removed "
-        f"{len(stripped)} id(s) absent from it." if stripped else
-        "Per-level roles are grounded in the evidence (no fabricated ids found)."
+    # --- verification pass: flag/downgrade overstated roles ------------- #
+    levels_json = analysis.model_dump_json(indent=2)
+    ver, _ = _generate(
+        client,
+        ("You are a strict verifier of a multi-level Drosophila functional "
+         "analysis. Given the EVIDENCE and the per-level roles, check each role's "
+         "references exist in the evidence and its connectivity_basis numbers are "
+         "real, and that confidence is not higher than the evidence warrants "
+         "(remember: connectome gives no synapse sign/strength/modulation; coarse "
+         "levels describe the region/system not one cell). Populate role_adjustments "
+         "with (1-based) level_index + role_index and a LOWER recommended_confidence "
+         "for any overstated role (downgrades only); list any fabricated/overstated "
+         "claims in overstated; summarise in verification_notes."),
+        (f"EVIDENCE:\n{bundle}\n\nLEVELS:\n{levels_json}\n\n"
+         f"Valid literature ids: {sorted(valid_ids)}\n\nReturn your verification."),
+        HierarchyVerification,
     )
+    downgrades: list[str] = []
+    if ver is not None:
+        for adj in ver.role_adjustments:
+            li, ri = adj.level_index - 1, adj.role_index - 1
+            if 0 <= li < len(analysis.levels) and 0 <= ri < len(analysis.levels[li].functional_roles):
+                role = analysis.levels[li].functional_roles[ri]
+                if CONFIDENCE_RANK.get(adj.recommended_confidence, 99) < CONFIDENCE_RANK.get(role.confidence, 0):
+                    downgrades.append(
+                        f"{analysis.levels[li].level}/{role.function[:32]} "
+                        f"{role.confidence}→{adj.recommended_confidence}")
+                    role.confidence = adj.recommended_confidence
+
+    notes = (ver.verification_notes if ver is not None else "")
+    if stripped:
+        notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
+                  f"evidence: {', '.join(sorted(stripped))}.")
+    if downgrades:
+        notes += "\n\n[auto] Confidence downgraded by verification: " + "; ".join(downgrades) + "."
+    if not notes:
+        notes = "Per-level roles are grounded in the evidence (no issues found)."
     caveats = [
         "Synapse sign, effective strength, and neuromodulation are unknown from "
         "connectivity; weights vary across individuals.",

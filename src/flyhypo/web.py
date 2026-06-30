@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import connectome, hierarchy, literature, synthesize
 from .cli import _slug, render_hierarchy_markdown, render_markdown
-from .schema import Hypothesis
+from .schema import HierarchyReport, Hypothesis
 
 OUTPUT_DIR = Path("outputs")
 
@@ -166,7 +166,7 @@ $("#f").addEventListener("submit", async (ev) => {
     const data = await r.json();
     $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
-    if ("levels" in data) { renderHierarchy(data); }
+    if ("levels" in data) { renderHierarchy(data); loadHistory(); }
     else { render(data); if ("hypotheses" in data) loadHistory(); }
   } catch (e) {
     $("#status").innerHTML = ""; renderError(String(e));
@@ -533,7 +533,7 @@ async function openReport(slug){
     const r = await fetch("/api/report/"+encodeURIComponent(slug));
     const data = await r.json(); $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
-    render(data);
+    if ("levels" in data) renderHierarchy(data); else render(data);
   } catch (e) { $("#status").innerHTML=""; renderError(String(e)); }
   finally { $("#go").disabled = false; }
 }
@@ -660,9 +660,8 @@ class Handler(BaseHTTPRequestHandler):
             return []
         items = []
         for p in OUTPUT_DIR.glob("*.json"):
-            if p.stem.endswith("_hierarchy"):
-                continue  # different shape; rendered live, not via the report endpoint
-            items.append({"slug": p.stem, "mtime": p.stat().st_mtime})
+            kind = "hierarchy" if p.stem.endswith("_hierarchy") else "report"
+            items.append({"slug": p.stem, "mtime": p.stat().st_mtime, "kind": kind})
         items.sort(key=lambda x: x["mtime"], reverse=True)
         return items
 
@@ -683,9 +682,15 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body.encode("utf-8"))
             return
         # Re-render markdown so the loaded report also gets a MD download button.
-        result = Hypothesis.model_validate_json(jpath.read_text())
-        payload = result.model_dump(by_alias=True)
-        payload["_markdown"] = render_markdown(result)
+        text = jpath.read_text()
+        if slug.endswith("_hierarchy"):
+            report = HierarchyReport.model_validate_json(text)
+            payload = report.model_dump(by_alias=True)
+            payload["_markdown"] = render_hierarchy_markdown(report)
+        else:
+            result = Hypothesis.model_validate_json(text)
+            payload = result.model_dump(by_alias=True)
+            payload["_markdown"] = render_markdown(result)
         self._send(200, json.dumps(payload).encode("utf-8"), "application/json")
 
 

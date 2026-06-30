@@ -172,6 +172,22 @@ class HierarchyReport(BaseModel):
     reasoning_summary: str = ""
 
 
+class RoleAdjustment(BaseModel):
+    """Verifier recommendation to re-tier one role in the hierarchy (applied only
+    if it LOWERS confidence)."""
+
+    level_index: int  # 1-based index into HierarchyReport.levels
+    role_index: int  # 1-based index into that level's functional_roles
+    recommended_confidence: Confidence
+    reason: str
+
+
+class HierarchyVerification(BaseModel):
+    overstated: list[str] = Field(default_factory=list)
+    role_adjustments: list[RoleAdjustment] = Field(default_factory=list)
+    verification_notes: str
+
+
 class VerificationResult(BaseModel):
     """Lightweight second-pass check of each statement against the evidence."""
 
