@@ -20,8 +20,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import connectome, literature, synthesize
-from .cli import _slug, render_markdown
+from . import connectome, hierarchy, literature, synthesize
+from .cli import _slug, render_hierarchy_markdown, render_markdown
 from .schema import Hypothesis
 
 OUTPUT_DIR = Path("outputs")
@@ -126,6 +126,7 @@ PAGE = """<!doctype html>
     <label>Mode
       <select id="mode">
         <option value="full">Full (structure + literature + LLM)</option>
+        <option value="hierarchy">Hierarchy (region▸…▸neuron, all levels)</option>
         <option value="fingerprint">Fingerprint only (neuPrint)</option>
       </select>
     </label>
@@ -154,15 +155,19 @@ $("#f").addEventListener("submit", async (ev) => {
   $("#go").disabled = true;
   $("#out").innerHTML = "";
   const mode = $("#mode").value;
-  $("#status").innerHTML = '<div class="status">Running '+(mode==="full"?"full pipeline (neuPrint → PubMed → Gemini ×2)":"neuPrint fingerprint")+' for <b>'+cell+'</b>… this can take ~30–60s.</div>';
+  const what = mode==="full" ? "full pipeline (neuPrint → PubMed → Gemini ×2)"
+             : mode==="hierarchy" ? "multi-level hierarchy (region → neuron)"
+             : "neuPrint fingerprint";
+  $("#status").innerHTML = '<div class="status">Running '+what+' for <b>'+cell+'</b>… '+
+    (mode==="fingerprint"?"":"this can take ~30–60s.")+'</div>';
   try {
     const r = await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({cell_type:cell, dataset:$("#dataset").value.trim(), top_k:+$("#topk").value, mode})});
     const data = await r.json();
     $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
-    render(data);
-    if ("hypotheses" in data) loadHistory();
+    if ("levels" in data) { renderHierarchy(data); }
+    else { render(data); if ("hypotheses" in data) loadHistory(); }
   } catch (e) {
     $("#status").innerHTML = ""; renderError(String(e));
   } finally { $("#go").disabled = false; }
@@ -244,30 +249,70 @@ function renderFingerprint(fp){
   out.appendChild(partnerTable("Top downstream partners", fp.downstream));
 }
 
+function roleCard(r){
+  const card=el("div","hyp");
+  const head=el("h3");
+  head.appendChild(el("span",null,r.function));
+  head.appendChild(el("span","badge b-"+r.confidence, r.confidence));
+  card.appendChild(head);
+  card.appendChild(el("div","why","evidence: "+r.evidence_type));
+  if(r.references && r.references.length)
+    card.appendChild(el("div","why","references: "+r.references.join(", ")));
+  if(r.connectivity_basis && r.connectivity_basis.length){
+    const ul=el("ul","grounded");
+    r.connectivity_basis.forEach(x=>{const li=el("li");
+      li.innerHTML="<code>"+escapeHtml(x)+"</code>"; ul.appendChild(li);});
+    card.appendChild(ul);
+  }
+  return card;
+}
+
 function renderRoles(roles){
   if(!roles || !roles.length) return;
   const s=el("section");
   s.appendChild(el("h2",null,"Functional roles — what this neuron is involved in"));
   s.appendChild(el("div","muted",
     "Each role is grounded in a paper id and/or a specific connectivity number."));
-  roles.forEach(r=>{
-    const card=el("div","hyp");
-    const head=el("h3");
-    head.appendChild(el("span",null,r.function));
-    head.appendChild(el("span","badge b-"+r.confidence, r.confidence));
-    card.appendChild(head);
-    card.appendChild(el("div","why","evidence: "+r.evidence_type));
-    if(r.references && r.references.length)
-      card.appendChild(el("div","why","references: "+r.references.join(", ")));
-    if(r.connectivity_basis && r.connectivity_basis.length){
-      const ul=el("ul","grounded");
-      r.connectivity_basis.forEach(x=>{const li=el("li");
-        li.innerHTML="<code>"+escapeHtml(x)+"</code>"; ul.appendChild(li);});
-      card.appendChild(ul);
-    }
-    s.appendChild(card);
-  });
+  roles.forEach(r=>s.appendChild(roleCard(r)));
   $("#out").appendChild(s);
+}
+
+const LEVEL_TITLES = {region:"REGION", subregion:"SUBREGION",
+  umbrella:"UMBRELLA (system)", cell_type:"CELL TYPE", neuron:"NEURON"};
+
+function renderHierarchy(d){
+  $("#out").appendChild(toolbar(d));
+  const h=el("section");
+  h.appendChild(el("h2",null,"Hierarchical functional analysis"));
+  const chain=el("div","kv");
+  chain.innerHTML = "region <b>"+(d.region||"?")+"</b> ▸ subregion <b>"+(d.subregion||"?")+
+    "</b> ▸ type <b>"+(d.cell_type||"?")+"</b>"+(d.neuron_bodyId?(" ▸ neuron <b>"+d.neuron_bodyId+"</b>"):"");
+  h.appendChild(chain);
+  h.appendChild(el("div","muted",
+    "Functions at each level (coarse → fine); each role grounded in paper id(s) and/or connectivity numbers."));
+  $("#out").appendChild(h);
+  (d.levels||[]).forEach(lvl=>{
+    const s=el("section");
+    s.appendChild(el("h2",null,(LEVEL_TITLES[lvl.level]||lvl.level)+": "+lvl.label));
+    if(lvl.note) s.appendChild(el("div","muted",lvl.note));
+    (lvl.functional_roles||[]).forEach(r=>s.appendChild(roleCard(r)));
+    $("#out").appendChild(s);
+  });
+  // literature
+  const lit=el("section"); lit.appendChild(el("h2",null,"Literature used"));
+  const ul=el("ul","lit");
+  (d.literature||[]).forEach(hh=>{ const li=el("li");
+    li.innerHTML="["+hh.source+":"+escapeHtml(hh.id)+"] "+(hh.year?("("+hh.year+") "):"")+escapeHtml(hh.title); ul.appendChild(li);});
+  lit.appendChild(ul); $("#out").appendChild(lit);
+  if(d.caveats && d.caveats.length) $("#out").appendChild(bullets("Caveats", d.caveats));
+  const v=el("section"); v.appendChild(el("h2",null,"Verification notes"));
+  const vn=el("div","muted", d.verification_notes||"(none)"); vn.style.whiteSpace="pre-wrap";
+  v.appendChild(vn); $("#out").appendChild(v);
+  if(d.reasoning_summary){
+    const rs=el("section"); rs.appendChild(el("h2",null,"Model reasoning (summary)"));
+    const pre=el("div","muted"); pre.style.whiteSpace="pre-wrap"; pre.textContent=d.reasoning_summary;
+    rs.appendChild(pre); $("#out").appendChild(rs);
+  }
 }
 
 function render(data){
@@ -563,6 +608,26 @@ class Handler(BaseHTTPRequestHandler):
         if not cell:
             return {"error": "cell_type is required"}
 
+        # --- multi-level hierarchy mode --------------------------------- #
+        if mode == "hierarchy":
+            body_id = int(cell) if cell.isdigit() else None
+            query = None if body_id is not None else cell
+            context, type_fp, _ = hierarchy.build_context(query, dataset, top_k, body_id)
+            if not (type_fp and type_fp.found):
+                msg = "could not resolve a cell type for the hierarchy"
+                if type_fp and type_fp.suggestions:
+                    msg += "; did you mean: " + ", ".join(type_fp.suggestions)
+                return {"error": msg}
+            lit = literature.fetch_literature(type_fp)
+            report = synthesize.synthesize_hierarchy(context, lit)
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            slug = _slug((f"bodyId_{body_id}" if body_id else cell) + "_hierarchy")
+            (OUTPUT_DIR / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
+            (OUTPUT_DIR / f"{slug}.md").write_text(render_hierarchy_markdown(report))
+            payload = report.model_dump(by_alias=True)
+            payload["_markdown"] = render_hierarchy_markdown(report)
+            return payload
+
         # An all-digits query is treated as a bodyId (single-neuron mode).
         if cell.isdigit():
             fp = connectome.build_neuron_fingerprint(int(cell), dataset, top_k)
@@ -595,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
             return []
         items = []
         for p in OUTPUT_DIR.glob("*.json"):
+            if p.stem.endswith("_hierarchy"):
+                continue  # different shape; rendered live, not via the report endpoint
             items.append({"slug": p.stem, "mtime": p.stat().st_mtime})
         items.sort(key=lambda x: x["mtime"], reverse=True)
         return items

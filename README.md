@@ -131,7 +131,9 @@ uv run flyhypo-web            # → http://127.0.0.1:8000
 
 ![flyhypo web UI — full EPG report](docs/screenshot.png)
 
-Type a cell type, pick **Full** or **Fingerprint only**, and the page renders:
+Type a cell type (or a numeric bodyId), pick **Full**, **Hierarchy** (region ▸
+subregion ▸ umbrella ▸ cell type ▸ neuron), or **Fingerprint only**, and the page
+renders:
 
 - **functional roles** — the headline answer: the functions this neuron is
   implicated in, each tagged literature / connectivity / both, with the paper ids
