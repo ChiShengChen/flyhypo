@@ -130,6 +130,9 @@ PAGE = """<!doctype html>
         <option value="fingerprint">Fingerprint only (neuPrint)</option>
       </select>
     </label>
+    <label title="second LLM pass that downgrades over-stated confidence (slower, more tokens)">Verify
+      <span style="display:flex;align-items:center;height:38px"><input type="checkbox" id="verify" checked></span>
+    </label>
     <button type="submit" id="go">Generate</button>
   </form>
 
@@ -162,7 +165,7 @@ $("#f").addEventListener("submit", async (ev) => {
     (mode==="fingerprint"?"":"this can take ~30–60s.")+'</div>';
   try {
     const r = await fetch("/api/run", {method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({cell_type:cell, dataset:$("#dataset").value.trim(), top_k:+$("#topk").value, mode})});
+      body: JSON.stringify({cell_type:cell, dataset:$("#dataset").value.trim(), top_k:+$("#topk").value, mode, verify:$("#verify").checked})});
     const data = await r.json();
     $("#status").innerHTML = "";
     if (!r.ok || data.error) { renderError(data.error || ("HTTP "+r.status)); return; }
@@ -605,6 +608,7 @@ class Handler(BaseHTTPRequestHandler):
         dataset = (req.get("dataset") or connectome.DEFAULT_DATASET).strip()
         top_k = int(req.get("top_k") or 15)
         mode = req.get("mode", "full")
+        do_verify = bool(req.get("verify", True))
         if not cell:
             return {"error": "cell_type is required"}
 
@@ -619,7 +623,7 @@ class Handler(BaseHTTPRequestHandler):
                     msg += "; did you mean: " + ", ".join(type_fp.suggestions)
                 return {"error": msg}
             lit = literature.fetch_literature(type_fp)
-            report = synthesize.synthesize_hierarchy(context, lit)
+            report = synthesize.synthesize_hierarchy(context, lit, verify=do_verify)
             OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
             slug = _slug((f"bodyId_{body_id}" if body_id else cell) + "_hierarchy")
             (OUTPUT_DIR / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
@@ -640,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
                 return {"fingerprint": fp.model_dump(by_alias=True)}
 
         lit = literature.fetch_literature(fp)
-        result = synthesize.synthesize(fp, lit)
+        result = synthesize.synthesize(fp, lit, verify=do_verify)
 
         # Persist like the CLI does, so it shows up in history.
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)

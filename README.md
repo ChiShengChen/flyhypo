@@ -165,6 +165,7 @@ matching the connectome layer — not individual `bodyId`s.
 | `--out` | Output directory (default `outputs/`). |
 | `--neuron BODYID` | Single-neuron mode: fingerprint one bodyId instead of a cell type. |
 | `--hierarchy` | Analyze every level (region ▸ subregion ▸ umbrella/system ▸ cell type ▸ neuron), each with functional roles + refs. |
+| `--no-verify` | Skip the LLM verification pass (faster, ~half the tokens; citation hygiene still applied). Web UI: the **Verify** checkbox. |
 | `--fingerprint-only` | Stop after step 1 (no Gemini key needed). |
 | `--no-cache` | Bypass the on-disk query cache. |
 

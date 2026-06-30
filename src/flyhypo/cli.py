@@ -268,6 +268,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="outputs/")
     ap.add_argument("--no-cache", action="store_true", help="bypass on-disk cache")
     ap.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="skip the LLM verification pass (faster, fewer tokens; citation "
+             "hygiene still applied)",
+    )
+    ap.add_argument(
         "--hierarchy",
         action="store_true",
         help="analyze every level: region ▸ subregion ▸ umbrella(system) ▸ "
@@ -301,7 +307,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("suggestions:", ", ".join(type_fp.suggestions))
             return 2
         lit = literature.fetch_literature(anchor, use_cache=not args.no_cache)
-        report = synthesize.synthesize_hierarchy(context, lit)
+        report = synthesize.synthesize_hierarchy(context, lit, verify=not args.no_verify)
 
         out_dir = Path(args.out)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -330,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     from . import literature, synthesize
 
     lit = literature.fetch_literature(fp, use_cache=not args.no_cache)
-    result = synthesize.synthesize(fp, lit)
+    result = synthesize.synthesize(fp, lit, verify=not args.no_verify)
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)

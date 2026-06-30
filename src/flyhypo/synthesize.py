@@ -185,7 +185,9 @@ def _generate(client: genai.Client, system: str, prompt: str, schema):
     return resp.parsed, "\n".join(thoughts).strip()
 
 
-def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesis:
+def synthesize(
+    fp: StructuralFingerprint, lit: list[LiteratureHit], *, verify: bool = True
+) -> Hypothesis:
     client = _client()
     bundle = _evidence_bundle(fp, lit)
 
@@ -237,35 +239,36 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
         stripped.update(set(role.references) - set(kept))
         role.references = kept
 
-    # --- pass 2: verify each statement against the evidence ------------- #
-    verification, _ = _generate(
-        client,
-        VERIFY_SYSTEM,
-        (
-            f"EVIDENCE:\n{bundle}\n\n"
-            f"Valid literature ids: {sorted(valid_ids)}\n\n"
-            f"PROPOSED HYPOTHESES:\n{analysis.model_dump_json(indent=2)}\n\n"
-            "Return your verification."
-        ),
-        VerificationResult,
-    )
-    verification = verification or VerificationResult(
-        verification_notes="(verification pass returned no output)"
-    )
-
-    # --- reasoning-driven gating: apply verifier downgrades (never upgrade) - #
+    # --- pass 2: verify each statement against the evidence (optional) -- #
     downgrades: list[str] = []
-    for adj in verification.confidence_adjustments:
-        i = adj.hypothesis_index - 1
-        if not (0 <= i < len(analysis.hypotheses)):
-            continue
-        hyp = analysis.hypotheses[i]
-        cur, rec = hyp.confidence, adj.recommended_confidence
-        if CONFIDENCE_RANK.get(rec, 99) < CONFIDENCE_RANK.get(cur, 0):
-            downgrades.append(f"H{adj.hypothesis_index} {cur}→{rec} ({adj.reason})")
-            hyp.confidence = rec
-
-    notes = verification.verification_notes
+    if verify:
+        verification, _ = _generate(
+            client,
+            VERIFY_SYSTEM,
+            (
+                f"EVIDENCE:\n{bundle}\n\n"
+                f"Valid literature ids: {sorted(valid_ids)}\n\n"
+                f"PROPOSED HYPOTHESES:\n{analysis.model_dump_json(indent=2)}\n\n"
+                "Return your verification."
+            ),
+            VerificationResult,
+        )
+        verification = verification or VerificationResult(
+            verification_notes="(verification pass returned no output)"
+        )
+        # reasoning-driven gating: apply verifier downgrades (never upgrade).
+        for adj in verification.confidence_adjustments:
+            i = adj.hypothesis_index - 1
+            if not (0 <= i < len(analysis.hypotheses)):
+                continue
+            hyp = analysis.hypotheses[i]
+            cur, rec = hyp.confidence, adj.recommended_confidence
+            if CONFIDENCE_RANK.get(rec, 99) < CONFIDENCE_RANK.get(cur, 0):
+                downgrades.append(f"H{adj.hypothesis_index} {cur}→{rec} ({adj.reason})")
+                hyp.confidence = rec
+        notes = verification.verification_notes
+    else:
+        notes = "[auto] Verification pass skipped (fast mode); citation hygiene still applied."
     if stripped:
         notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
                   f"evidence (anti-fabrication): {', '.join(sorted(stripped))}.")
@@ -311,7 +314,7 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
 
 
 def synthesize_hierarchy(
-    context: dict, lit: list[LiteratureHit]
+    context: dict, lit: list[LiteratureHit], *, verify: bool = True
 ) -> HierarchyReport:
     """One Gemini call → functional roles at every hierarchy level."""
     client = _client()
@@ -343,36 +346,41 @@ def synthesize_hierarchy(
             if lvl.level == "neuron" and CONFIDENCE_RANK.get(role.confidence, 0) > CONFIDENCE_RANK["low"]:
                 role.confidence = "low"
 
-    # --- verification pass: flag/downgrade overstated roles ------------- #
-    levels_json = analysis.model_dump_json(indent=2)
-    ver, _ = _generate(
-        client,
-        ("You are a strict verifier of a multi-level Drosophila functional "
-         "analysis. Given the EVIDENCE and the per-level roles, check each role's "
-         "references exist in the evidence and its connectivity_basis numbers are "
-         "real, and that confidence is not higher than the evidence warrants "
-         "(remember: connectome gives no synapse sign/strength/modulation; coarse "
-         "levels describe the region/system not one cell). Populate role_adjustments "
-         "with (1-based) level_index + role_index and a LOWER recommended_confidence "
-         "for any overstated role (downgrades only); list any fabricated/overstated "
-         "claims in overstated; summarise in verification_notes."),
-        (f"EVIDENCE:\n{bundle}\n\nLEVELS:\n{levels_json}\n\n"
-         f"Valid literature ids: {sorted(valid_ids)}\n\nReturn your verification."),
-        HierarchyVerification,
-    )
+    # --- verification pass: flag/downgrade overstated roles (optional) -- #
     downgrades: list[str] = []
-    if ver is not None:
-        for adj in ver.role_adjustments:
-            li, ri = adj.level_index - 1, adj.role_index - 1
-            if 0 <= li < len(analysis.levels) and 0 <= ri < len(analysis.levels[li].functional_roles):
-                role = analysis.levels[li].functional_roles[ri]
-                if CONFIDENCE_RANK.get(adj.recommended_confidence, 99) < CONFIDENCE_RANK.get(role.confidence, 0):
-                    downgrades.append(
-                        f"{analysis.levels[li].level}/{role.function[:32]} "
-                        f"{role.confidence}→{adj.recommended_confidence}")
-                    role.confidence = adj.recommended_confidence
+    ver_notes = ""
+    if verify:
+        levels_json = analysis.model_dump_json(indent=2)
+        ver, _ = _generate(
+            client,
+            ("You are a strict verifier of a multi-level Drosophila functional "
+             "analysis. Given the EVIDENCE and the per-level roles, check each role's "
+             "references exist in the evidence and its connectivity_basis numbers are "
+             "real, and that confidence is not higher than the evidence warrants "
+             "(remember: connectome gives no synapse sign/strength/modulation; coarse "
+             "levels describe the region/system not one cell). Populate role_adjustments "
+             "with (1-based) level_index + role_index and a LOWER recommended_confidence "
+             "for any overstated role (downgrades only); list any fabricated/overstated "
+             "claims in overstated; summarise in verification_notes."),
+            (f"EVIDENCE:\n{bundle}\n\nLEVELS:\n{levels_json}\n\n"
+             f"Valid literature ids: {sorted(valid_ids)}\n\nReturn your verification."),
+            HierarchyVerification,
+        )
+        if ver is not None:
+            ver_notes = ver.verification_notes
+            for adj in ver.role_adjustments:
+                li, ri = adj.level_index - 1, adj.role_index - 1
+                if 0 <= li < len(analysis.levels) and 0 <= ri < len(analysis.levels[li].functional_roles):
+                    role = analysis.levels[li].functional_roles[ri]
+                    if CONFIDENCE_RANK.get(adj.recommended_confidence, 99) < CONFIDENCE_RANK.get(role.confidence, 0):
+                        downgrades.append(
+                            f"{analysis.levels[li].level}/{role.function[:32]} "
+                            f"{role.confidence}→{adj.recommended_confidence}")
+                        role.confidence = adj.recommended_confidence
+    else:
+        ver_notes = "[auto] Verification pass skipped (fast mode); citation hygiene still applied."
 
-    notes = (ver.verification_notes if ver is not None else "")
+    notes = ver_notes
     if stripped:
         notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
                   f"evidence: {', '.join(sorted(stripped))}.")
