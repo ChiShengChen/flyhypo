@@ -244,10 +244,37 @@ function renderFingerprint(fp){
   out.appendChild(partnerTable("Top downstream partners", fp.downstream));
 }
 
+function renderRoles(roles){
+  if(!roles || !roles.length) return;
+  const s=el("section");
+  s.appendChild(el("h2",null,"Functional roles — what this neuron is involved in"));
+  s.appendChild(el("div","muted",
+    "Each role is grounded in a paper id and/or a specific connectivity number."));
+  roles.forEach(r=>{
+    const card=el("div","hyp");
+    const head=el("h3");
+    head.appendChild(el("span",null,r.function));
+    head.appendChild(el("span","badge b-"+r.confidence, r.confidence));
+    card.appendChild(head);
+    card.appendChild(el("div","why","evidence: "+r.evidence_type));
+    if(r.references && r.references.length)
+      card.appendChild(el("div","why","references: "+r.references.join(", ")));
+    if(r.connectivity_basis && r.connectivity_basis.length){
+      const ul=el("ul","grounded");
+      r.connectivity_basis.forEach(x=>{const li=el("li");
+        li.innerHTML="<code>"+escapeHtml(x)+"</code>"; ul.appendChild(li);});
+      card.appendChild(ul);
+    }
+    s.appendChild(card);
+  });
+  $("#out").appendChild(s);
+}
+
 function render(data){
   // fingerprint-only payload: {fingerprint:{...}}; full payload: full Hypothesis
   const fp = data.fingerprint;
   $("#out").appendChild(toolbar(data));
+  renderRoles(data.functional_roles);
   renderFingerprint(fp);
   renderGraph(fp);
   if(!("hypotheses" in data)) return;  // fingerprint-only

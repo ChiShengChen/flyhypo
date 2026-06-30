@@ -45,6 +45,23 @@ def render_markdown(h: Hypothesis) -> str:
         L.append(f"**Did you mean:** {', '.join(fp.suggestions)}")
         L.append("")
 
+    # --- functional roles (headline answer) ----------------------------- #
+    if h.functional_roles:
+        L.append("## Functional roles (what this neuron is involved in)")
+        L.append("_Each role is grounded in a paper id and/or a specific "
+                 "connectivity number. Roles with neither are not listed._")
+        L.append("")
+        for r in h.functional_roles:
+            L.append(f"### {r.function}")
+            L.append(f"- _evidence:_ **{r.evidence_type}** · confidence: **{r.confidence}**")
+            if r.references:
+                L.append(f"- _references:_ {', '.join(r.references)}")
+            if r.connectivity_basis:
+                L.append("- _connectivity basis:_")
+                for s in r.connectivity_basis:
+                    L.append(f"  - {s}")
+            L.append("")
+
     # --- fingerprint ---------------------------------------------------- #
     L.append("## Structural fingerprint")
     L.append(

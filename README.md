@@ -4,9 +4,10 @@
 
 Given a fly cell type (e.g. `EPG`, `MBON01`), `flyhypo` combines **structural
 evidence** from a connectome (neuPrint) with **functional evidence** from the
-literature (PubMed), then asks an LLM (Google Gemini) to synthesise a **grounded,
-falsifiable functional hypothesis** — output as structured JSON + a readable
-Markdown report.
+literature (PubMed), then asks an LLM (Google Gemini) to synthesise **the
+functional roles the neuron is involved in — each grounded in a paper id and/or a
+specific connectivity number** — plus tiered, falsifiable hypotheses. Output as
+structured JSON + a readable Markdown report.
 
 > **Core principle.** A connectome tells you *who connects to whom and roughly
 > how strongly*, but **not** synapse sign, effective/intrinsic strength, or
@@ -117,6 +118,9 @@ uv run flyhypo-web            # → http://127.0.0.1:8000
 
 Type a cell type, pick **Full** or **Fingerprint only**, and the page renders:
 
+- **functional roles** — the headline answer: the functions this neuron is
+  implicated in, each tagged literature / connectivity / both, with the paper ids
+  and connectivity numbers that ground it;
 - the **structural fingerprint** (input/output ROI tables, up/down-stream partner tables);
 - a **connectivity graph** (inline SVG) — the target in the centre, upstream partners
   on the left and downstream on the right, edge thickness ∝ synapse weight, with the

@@ -70,6 +70,16 @@ or PMIDs. Only cite ids that appear in the provided LITERATURE list.
 structural claims; rely on whatever literature exists at low/speculative \
 confidence and state the limitation prominently in caveats.
 
+7. Populate functional_roles FIRST — this is the headline answer: a concise list \
+of the distinct FUNCTIONS this neuron is implicated in (e.g. "heading-direction \
+encoding (ring attractor)", "anchoring the compass to visual landmarks"). For \
+each role give evidence_type (literature / connectivity / both), the specific \
+paper ids that support it in references, AND/OR the specific connectivity numbers \
+in connectivity_basis (e.g. "receives 14903 synapses from ER4m"), and a \
+confidence. Every role MUST have at least one reference or one connectivity_basis \
+entry — never list a function you cannot ground. Order roles most- to \
+least-supported.
+
 Be specific and quantitative. Prefer fewer, well-grounded hypotheses over many \
 vague ones."""
 
@@ -192,6 +202,10 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
         kept = [i for i in hyp.supporting_literature if i in valid_ids]
         stripped.update(set(hyp.supporting_literature) - set(kept))
         hyp.supporting_literature = kept
+    for role in analysis.functional_roles:
+        kept = [i for i in role.references if i in valid_ids]
+        stripped.update(set(role.references) - set(kept))
+        role.references = kept
 
     # --- pass 2: verify each statement against the evidence ------------- #
     verification, _ = _generate(
@@ -232,9 +246,9 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
     #     single-cell limits are present regardless of what the model wrote. --- #
     if fp.is_neuron:
         capped = 0
-        for hyp in analysis.hypotheses:
-            if CONFIDENCE_RANK.get(hyp.confidence, 0) > CONFIDENCE_RANK["low"]:
-                hyp.confidence = "low"
+        for item in [*analysis.hypotheses, *analysis.functional_roles]:
+            if CONFIDENCE_RANK.get(item.confidence, 0) > CONFIDENCE_RANK["low"]:
+                item.confidence = "low"
                 capped += 1
         auto_caveats = [
             f"Single neuron (bodyId {fp.neuron_bodyId}): function is inherited from "
@@ -256,6 +270,7 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
         dataset=fp.dataset,
         fingerprint=fp,
         literature=lit,
+        functional_roles=analysis.functional_roles,
         hypotheses=analysis.hypotheses,
         not_supported_by_connectivity=analysis.not_supported_by_connectivity,
         proposed_experiments=analysis.proposed_experiments,

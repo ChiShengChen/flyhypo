@@ -106,9 +106,25 @@ class ProposedExperiment(BaseModel):
     expected_result: str
 
 
+class FunctionalRole(BaseModel):
+    """A distinct function the neuron is implicated in, with its evidence.
+
+    This is the headline answer to "what functions does this neuron participate
+    in, and on what basis". Every role MUST carry at least one reference or one
+    connectivity_basis entry — no unsupported functions.
+    """
+
+    function: str  # e.g. "heading-direction encoding (ring attractor)"
+    evidence_type: Literal["literature", "connectivity", "both"]
+    references: list[str] = Field(default_factory=list)  # paper ids (PMID/DOI)
+    connectivity_basis: list[str] = Field(default_factory=list)  # fingerprint numbers
+    confidence: Confidence
+
+
 class HypothesisAnalysis(BaseModel):
     """The part the LLM produces. Fingerprint + literature are attached by us."""
 
+    functional_roles: list[FunctionalRole] = Field(default_factory=list)
     hypotheses: list[HypothesisItem] = Field(default_factory=list)
     not_supported_by_connectivity: list[str] = Field(default_factory=list)
     proposed_experiments: list[ProposedExperiment] = Field(default_factory=list)
@@ -140,6 +156,7 @@ class Hypothesis(BaseModel):
     dataset: str
     fingerprint: StructuralFingerprint
     literature: list[LiteratureHit] = Field(default_factory=list)
+    functional_roles: list[FunctionalRole] = Field(default_factory=list)
     hypotheses: list[HypothesisItem] = Field(default_factory=list)
     not_supported_by_connectivity: list[str] = Field(default_factory=list)
     proposed_experiments: list[ProposedExperiment] = Field(default_factory=list)
