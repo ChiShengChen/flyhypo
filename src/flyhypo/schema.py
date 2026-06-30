@@ -101,10 +101,21 @@ class HypothesisAnalysis(BaseModel):
     caveats: list[str] = Field(default_factory=list)
 
 
+class ConfidenceAdjustment(BaseModel):
+    """A verifier recommendation to re-tier a hypothesis (applied only if it
+    LOWERS confidence — the pipeline never upgrades a claim past what the
+    generator asserted)."""
+
+    hypothesis_index: int  # 1-based, matching the order of hypotheses
+    recommended_confidence: Confidence
+    reason: str
+
+
 class VerificationResult(BaseModel):
     """Lightweight second-pass check of each statement against the evidence."""
 
     unsupported_claims: list[str] = Field(default_factory=list)
+    confidence_adjustments: list[ConfidenceAdjustment] = Field(default_factory=list)
     verification_notes: str
 
 
@@ -120,3 +131,5 @@ class Hypothesis(BaseModel):
     proposed_experiments: list[ProposedExperiment] = Field(default_factory=list)
     caveats: list[str] = Field(default_factory=list)
     verification_notes: str = ""
+    # Brief summary of the model's own reasoning during synthesis (thought trace).
+    reasoning_summary: str = ""

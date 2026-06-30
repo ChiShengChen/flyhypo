@@ -294,7 +294,16 @@ function render(data){
     $("#out").appendChild(bullets("Caveats", data.caveats));
 
   const v=el("section"); v.appendChild(el("h2",null,"Verification notes"));
-  v.appendChild(el("div","muted", data.verification_notes||"(none)")); $("#out").appendChild(v);
+  const vn=el("div","muted", data.verification_notes||"(none)");
+  vn.style.whiteSpace="pre-wrap"; v.appendChild(vn); $("#out").appendChild(v);
+
+  if(data.reasoning_summary){
+    const rs=el("section"); rs.appendChild(el("h2",null,"Model reasoning (summary)"));
+    rs.appendChild(el("div","muted",
+      "The model's own thought summary during synthesis — for transparency, not authoritative."));
+    const pre=el("div","muted"); pre.style.whiteSpace="pre-wrap"; pre.style.marginTop="6px";
+    pre.textContent=data.reasoning_summary; rs.appendChild(pre); $("#out").appendChild(rs);
+  }
 }
 
 function bullets(title, items){

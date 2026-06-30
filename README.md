@@ -38,7 +38,7 @@ cell type ─▶ connectome.py ─▶ StructuralFingerprint ─┐
 | `schema.py` | Pydantic data contracts (`StructuralFingerprint`, `LiteratureHit`, `Hypothesis`). |
 | `connectome.py` | Pure, typed wrapper over `neuprint-python`. Resolves a type → fingerprint; fuzzy-suggests on miss. *(Designed to be liftable into a standalone MCP server.)* |
 | `literature.py` | Builds queries from the fingerprint and retrieves abstracts/metadata via `paper-search-mcp`. |
-| `synthesize.py` | One Gemini call generates tiered hypotheses; a second verifies each statement against the evidence. |
+| `synthesize.py` | Gemini (with explicit reasoning) generates tiered hypotheses; a verification pass then **downgrades** any over-stated confidence and the pipeline **strips any cited id not in the evidence**. The model's thought summary is surfaced as `reasoning_summary`. |
 | `cli.py` | `flyhypo <cell_type> …` → writes `<cell_type>.json` + `.md`, prints a summary. |
 
 ---

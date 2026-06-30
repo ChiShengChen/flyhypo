@@ -129,6 +129,13 @@ def render_markdown(h: Hypothesis) -> str:
     L.append("## Verification notes")
     L.append(h.verification_notes or "_(none)_")
     L.append("")
+    if h.reasoning_summary:
+        L.append("## Model reasoning (summary)")
+        L.append("_The model's own thought summary during synthesis — provided for "
+                 "transparency; it is not authoritative evidence._")
+        L.append("")
+        L.append(h.reasoning_summary)
+        L.append("")
     return "\n".join(L)
 
 
