@@ -76,6 +76,10 @@ uv run flyhypo SA1 --fingerprint-only
 
 # Single-neuron mode — structural fingerprint for one bodyId:
 uv run flyhypo --neuron 387364605
+
+# Multi-level analysis — region ▸ subregion ▸ umbrella ▸ cell type ▸ neuron:
+uv run flyhypo EPG --hierarchy
+uv run flyhypo --neuron 387364605 --hierarchy
 ```
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
@@ -105,6 +109,17 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > reconstruction idiosyncrasy, and synapse sign/strength/neuromodulation stay
 > unknown. Closing those needs cross-individual data (FlyWire) + single-cell
 > physiology — out of scope here.
+
+> **Multi-level mode (`--hierarchy`).** Reports functional roles at **every level**
+> of the hierarchy, each role grounded in paper id(s) and/or connectivity numbers:
+> **region** (neuropil, e.g. `EB`) ▸ **subregion** (compartment, e.g. `EBr2r4`) ▸
+> **umbrella** (the functional *system* / type-family — **named by the model**,
+> e.g. "central-complex compass system (EPG/PEN/PEG)", grounded in refs + shared
+> wiring) ▸ **cell type** (`EPG`) ▸ **neuron** (a bodyId, capped at `low`).
+> Region/subregion come from neuPrint ROIs and the type's dominant compartments;
+> coarser levels describe the region/system as a whole, not the single cell. Tip:
+> run once to warm the cache — the first uncached run makes many live neuPrint
+> calls and can be slow on a flaky connection.
 
 ### Web UI
 
@@ -147,6 +162,7 @@ matching the connectome layer — not individual `bodyId`s.
 | `--top-k` | Number of up/down-stream partner types to keep (default 15). |
 | `--out` | Output directory (default `outputs/`). |
 | `--neuron BODYID` | Single-neuron mode: fingerprint one bodyId instead of a cell type. |
+| `--hierarchy` | Analyze every level (region ▸ subregion ▸ umbrella/system ▸ cell type ▸ neuron), each with functional roles + refs. |
 | `--fingerprint-only` | Stop after step 1 (no Gemini key needed). |
 | `--no-cache` | Bypass the on-disk query cache. |
 

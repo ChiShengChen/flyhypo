@@ -17,6 +17,8 @@ from google import genai
 from google.genai import types
 
 from .schema import (
+    HierarchyAnalysis,
+    HierarchyReport,
     Hypothesis,
     HypothesisAnalysis,
     LiteratureHit,
@@ -99,6 +101,33 @@ support than the tier implies, or grounding that does not hold up), add an entry
 with the 1-based hypothesis_index, a LOWER recommended_confidence, and a one-line \
 reason. Only recommend downgrades, never upgrades. Leave the list empty if every \
 tier is justified."""
+
+
+HIERARCHY_SYSTEM = """\
+You analyze a Drosophila neuron at MULTIPLE hierarchical levels and report the \
+functional roles at EACH level, for experimentalists. Levels, coarse → fine:
+  - region: the primary neuropil (e.g. EB) — its overall function.
+  - subregion: the compartment within it (e.g. EBr2r4) — finer function.
+  - umbrella: the functional SYSTEM / cell-type family this type belongs to — you \
+must NAME it (e.g. "central-complex compass system (EPG+PEN+PEG)"), grounded in \
+literature and the shared connectivity.
+  - cell_type: the specific type (e.g. EPG).
+  - neuron: the individual cell (only if present in the evidence) — its function is \
+INHERITED from its type plus its topographic position; cap its confidence at 'low'.
+
+CORE PRINCIPLE — a connectome gives connectivity, not synapse sign, effective \
+strength, or neuromodulation; weights vary across individuals. Everything is a \
+hypothesis, never a stated fact.
+
+For EACH level, populate functional_roles: the distinct functions implicated at \
+THAT level, each grounded in specific paper id(s) in references AND/OR specific \
+connectivity numbers in connectivity_basis, with an evidence_type and confidence. \
+Every role MUST have at least one reference or one connectivity_basis entry. NEVER \
+invent paper ids — cite only ids present in the evidence. Coarser levels describe \
+the region/system as a whole (not this one cell). Emit one LevelAnalysis per level \
+present in the evidence (skip neuron if absent, subregion if none), ordered \
+coarse → fine. Set each level's label (the ROI name, the system name you chose, \
+the type, or the bodyId)."""
 
 
 def _evidence_bundle(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> str:
@@ -275,6 +304,67 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
         not_supported_by_connectivity=analysis.not_supported_by_connectivity,
         proposed_experiments=analysis.proposed_experiments,
         caveats=analysis.caveats,
+        verification_notes=notes,
+        reasoning_summary=reasoning[:2000],
+    )
+
+
+def synthesize_hierarchy(
+    context: dict, lit: list[LiteratureHit]
+) -> HierarchyReport:
+    """One Gemini call → functional roles at every hierarchy level."""
+    client = _client()
+    bundle = json.dumps(
+        {"hierarchy_context": context, "literature": [h.model_dump() for h in lit]},
+        indent=2, default=str,
+    )
+    analysis, reasoning = _generate(
+        client,
+        HIERARCHY_SYSTEM,
+        (
+            f"Query: {context.get('query')}\nDataset context below.\n\n"
+            f"EVIDENCE:\n{bundle}\n\n"
+            "Produce the per-level hierarchical analysis."
+        ),
+        HierarchyAnalysis,
+    )
+    if analysis is None:
+        raise RuntimeError("Hierarchy synthesis produced no parseable output.")
+
+    # Citation hygiene across every level + single-neuron 'low' cap.
+    valid_ids = {h.id for h in lit}
+    stripped: set[str] = set()
+    for lvl in analysis.levels:
+        for role in lvl.functional_roles:
+            kept = [i for i in role.references if i in valid_ids]
+            stripped.update(set(role.references) - set(kept))
+            role.references = kept
+            if lvl.level == "neuron" and CONFIDENCE_RANK.get(role.confidence, 0) > CONFIDENCE_RANK["low"]:
+                role.confidence = "low"
+
+    notes = (
+        "Per-level roles are grounded in the evidence; citation hygiene removed "
+        f"{len(stripped)} id(s) absent from it." if stripped else
+        "Per-level roles are grounded in the evidence (no fabricated ids found)."
+    )
+    caveats = [
+        "Synapse sign, effective strength, and neuromodulation are unknown from "
+        "connectivity; weights vary across individuals.",
+        "Coarser levels (region/subregion/umbrella) describe the region or system "
+        "as a whole, not this single cell.",
+        "The connectome is from one fly (n=1); single-neuron roles are inherited "
+        "from the type plus topographic position, capped at 'low'.",
+    ]
+    return HierarchyReport(
+        query=context.get("query", ""),
+        dataset=context.get("dataset", ""),
+        region=context.get("region"),
+        subregion=context.get("subregion"),
+        cell_type=context.get("cell_type"),
+        neuron_bodyId=context.get("neuron_bodyId"),
+        literature=lit,
+        levels=analysis.levels,
+        caveats=caveats,
         verification_notes=notes,
         reasoning_summary=reasoning[:2000],
     )

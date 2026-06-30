@@ -112,13 +112,20 @@ def find_matching_roi(client: Client, query: str) -> str | None:
 
 def types_in_roi(client: Client, roi: str, limit: int = 8) -> list[str]:
     """Representative cell types that arborize in `roi`, busiest first."""
+    return [d["type"] for d in region_dominant_types(client, roi, limit)]
+
+
+def region_dominant_types(client: Client, roi: str, limit: int = 12) -> list[dict]:
+    """Cell types arborizing in `roi` with their cell counts, busiest first."""
     cypher = (
         f"MATCH (n:Neuron) WHERE n.type IS NOT NULL AND n.`{roi}` IS NOT NULL "
         f"RETURN n.type AS type, count(*) AS ncells "
         f"ORDER BY ncells DESC LIMIT {int(limit)}"
     )
     try:
-        return client.fetch_custom(cypher)["type"].tolist()
+        df = client.fetch_custom(cypher)
+        return [{"type": str(t), "n_cells": int(n)}
+                for t, n in zip(df["type"], df["ncells"])]
     except Exception:
         return []
 
@@ -234,7 +241,7 @@ def build_neuron_fingerprint(
     """
     cache_key = f"{dataset}|neuron:{body_id}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint", cache_key)
+        cached = cache.get("fingerprint_v2", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -250,7 +257,7 @@ def build_neuron_fingerprint(
             notes=f"No neuron with bodyId {body_id} found in {dataset}.",
         )
         if use_cache:
-            cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     row = neurons.iloc[0]
@@ -308,7 +315,7 @@ def build_neuron_fingerprint(
         ),
     )
     if use_cache:
-        cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
     return fp
 
 
@@ -321,7 +328,7 @@ def build_fingerprint(
 ) -> StructuralFingerprint:
     cache_key = f"{dataset}|{cell_type}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint", cache_key)
+        cached = cache.get("fingerprint_v2", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -368,7 +375,7 @@ def build_fingerprint(
             ),
         )
         if use_cache:
-            cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     # --- resolved instances --------------------------------------------- #
@@ -424,8 +431,9 @@ def build_fingerprint(
         output_rois=output_rois,
         upstream=upstream,
         downstream=downstream,
+        sub_rois=_subcompartments(roi_counts, primary),
         notes=f"Resolved {len(resolved)} cell(s) of type '{cell_type}'." + nt_note,
     )
     if use_cache:
-        cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
     return fp

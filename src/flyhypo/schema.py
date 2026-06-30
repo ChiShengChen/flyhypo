@@ -141,6 +141,37 @@ class ConfidenceAdjustment(BaseModel):
     reason: str
 
 
+class LevelAnalysis(BaseModel):
+    """Functional roles at one level of the neuron/type/system/region hierarchy."""
+
+    level: Literal["region", "subregion", "umbrella", "cell_type", "neuron"]
+    label: str  # e.g. "EB", "EBr2r4", "central-complex compass system", "EPG"
+    functional_roles: list[FunctionalRole] = Field(default_factory=list)
+    note: str = ""
+
+
+class HierarchyAnalysis(BaseModel):
+    """LLM output for the multi-level analysis."""
+
+    levels: list[LevelAnalysis] = Field(default_factory=list)
+
+
+class HierarchyReport(BaseModel):
+    """Final multi-level report: functional roles at every hierarchy level."""
+
+    query: str
+    dataset: str
+    region: str | None = None
+    subregion: str | None = None
+    cell_type: str | None = None
+    neuron_bodyId: int | None = None
+    literature: list[LiteratureHit] = Field(default_factory=list)
+    levels: list[LevelAnalysis] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    verification_notes: str = ""
+    reasoning_summary: str = ""
+
+
 class VerificationResult(BaseModel):
     """Lightweight second-pass check of each statement against the evidence."""
 

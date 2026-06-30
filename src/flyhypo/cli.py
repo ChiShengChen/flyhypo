@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-from .schema import Hypothesis, StructuralFingerprint
+from .schema import HierarchyReport, Hypothesis, StructuralFingerprint
 
 
 def _slug(name: str) -> str:
@@ -170,6 +170,73 @@ def render_markdown(h: Hypothesis) -> str:
     return "\n".join(L)
 
 
+_LEVEL_TITLES = {
+    "region": "REGION", "subregion": "SUBREGION", "umbrella": "UMBRELLA (system)",
+    "cell_type": "CELL TYPE", "neuron": "NEURON",
+}
+
+
+def render_hierarchy_markdown(r: HierarchyReport) -> str:
+    L: list[str] = []
+    L.append(f"# Hierarchical functional analysis: `{r.query}`")
+    L.append("")
+    L.append(f"**Dataset:** {r.dataset}  ")
+    L.append(
+        f"**Resolved:** region `{r.region or '?'}` ▸ subregion `{r.subregion or '?'}` "
+        f"▸ type `{r.cell_type or '?'}`"
+        + (f" ▸ neuron `{r.neuron_bodyId}`" if r.neuron_bodyId else "")
+    )
+    L.append("")
+    L.append(
+        "> Functions are reported at each level (coarse → fine). Each role is "
+        "grounded in a paper id and/or a connectivity number. A connectome gives "
+        "connectivity, not synapse sign/strength/neuromodulation — these are "
+        "**hypotheses for experimentalists**."
+    )
+    L.append("")
+    for lvl in r.levels:
+        L.append(f"## {_LEVEL_TITLES.get(lvl.level, lvl.level.upper())}: {lvl.label}")
+        if lvl.note:
+            L.append(f"_{lvl.note}_")
+        for role in lvl.functional_roles:
+            L.append(f"### {role.function}")
+            L.append(f"- _evidence:_ **{role.evidence_type}** · confidence: **{role.confidence}**")
+            if role.references:
+                L.append(f"- _references:_ {', '.join(role.references)}")
+            if role.connectivity_basis:
+                L.append("- _connectivity basis:_")
+                for s in role.connectivity_basis:
+                    L.append(f"  - {s}")
+            L.append("")
+        L.append("")
+    L.append("## Literature used")
+    for hit in r.literature:
+        yr = f" ({hit.year})" if hit.year else ""
+        L.append(f"- **[{hit.source}:{hit.id}]**{yr} {hit.title}")
+    L.append("")
+    L.append("## Caveats")
+    for c in r.caveats:
+        L.append(f"- {c}")
+    L.append("")
+    L.append("## Verification notes")
+    L.append(r.verification_notes or "_(none)_")
+    L.append("")
+    if r.reasoning_summary:
+        L.append("## Model reasoning (summary)")
+        L.append(r.reasoning_summary)
+        L.append("")
+    return "\n".join(L)
+
+
+def _print_hierarchy_summary(r: HierarchyReport) -> None:
+    print(f"\n=== flyhypo hierarchy: {r.query} ({r.dataset}) ===")
+    print(f"  region={r.region} subregion={r.subregion} type={r.cell_type}"
+          + (f" neuron={r.neuron_bodyId}" if r.neuron_bodyId else ""))
+    for lvl in r.levels:
+        print(f"  [{lvl.level}] {lvl.label}: {len(lvl.functional_roles)} role(s)")
+    print(f"  literature hits: {len(r.literature)}")
+
+
 def _print_summary(h: Hypothesis) -> None:
     fp = h.fingerprint
     print(f"\n=== flyhypo: {h.cell_type} ({h.dataset}) ===")
@@ -201,6 +268,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", default="outputs/")
     ap.add_argument("--no-cache", action="store_true", help="bypass on-disk cache")
     ap.add_argument(
+        "--hierarchy",
+        action="store_true",
+        help="analyze every level: region ▸ subregion ▸ umbrella(system) ▸ "
+             "cell_type ▸ neuron, each with functional roles + refs",
+    )
+    ap.add_argument(
         "--fingerprint-only",
         action="store_true",
         help="stop after the structural fingerprint (step 1; no API keys for LLM)",
@@ -211,6 +284,33 @@ def main(argv: list[str] | None = None) -> int:
 
     # Imported lazily so --help works without credentials/network.
     from . import connectome
+
+    # --- multi-level hierarchy mode ------------------------------------- #
+    if args.hierarchy:
+        from . import hierarchy, literature, synthesize
+
+        context, type_fp, _ = hierarchy.build_context(
+            args.cell_type, args.dataset, args.top_k, args.neuron,
+            use_cache=not args.no_cache,
+        )
+        anchor = type_fp if (type_fp and type_fp.found) else None
+        if anchor is None:
+            print("Could not resolve a cell type for the hierarchy "
+                  f"(query={args.cell_type or args.neuron}).")
+            if type_fp and type_fp.suggestions:
+                print("suggestions:", ", ".join(type_fp.suggestions))
+            return 2
+        lit = literature.fetch_literature(anchor, use_cache=not args.no_cache)
+        report = synthesize.synthesize_hierarchy(context, lit)
+
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        slug = _slug((f"bodyId_{args.neuron}" if args.neuron else args.cell_type) + "_hierarchy")
+        (out_dir / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
+        (out_dir / f"{slug}.md").write_text(render_hierarchy_markdown(report))
+        _print_hierarchy_summary(report)
+        print(f"\nwrote {out_dir / (slug + '.json')} and {out_dir / (slug + '.md')}")
+        return 0
 
     if args.neuron is not None:
         fp = connectome.build_neuron_fingerprint(
