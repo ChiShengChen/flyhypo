@@ -141,6 +141,42 @@ class ConfidenceAdjustment(BaseModel):
     reason: str
 
 
+class DatasetSummary(BaseModel):
+    """One dataset's view of the queried type (for cross-dataset replication)."""
+
+    dataset: str
+    found: bool
+    n_cells: int = 0
+    predicted_nt: str | None = None
+    upstream: list[Partner] = Field(default_factory=list)
+    downstream: list[Partner] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+
+
+class PartnerAgreement(BaseModel):
+    """How a partner type fares across datasets."""
+
+    partner_type: str
+    direction: Literal["upstream", "downstream"]
+    weights: dict[str, int] = Field(default_factory=dict)  # dataset -> total synapses
+    n_datasets: int = 0  # in how many datasets it appears among the top-K
+
+
+class ReplicationReport(BaseModel):
+    """Cross-dataset replication of a type's connectivity motif (structural only)."""
+
+    cell_type: str
+    base_dataset: str
+    datasets: list[str] = Field(default_factory=list)
+    summaries: list[DatasetSummary] = Field(default_factory=list)
+    # Jaccard overlap of top-K partner-type sets vs the base dataset.
+    upstream_agreement: dict[str, float] = Field(default_factory=dict)
+    downstream_agreement: dict[str, float] = Field(default_factory=dict)
+    replicated_partners: list[PartnerAgreement] = Field(default_factory=list)
+    divergent_partners: list[PartnerAgreement] = Field(default_factory=list)
+    notes: str = ""
+
+
 class LevelAnalysis(BaseModel):
     """Functional roles at one level of the neuron/type/system/region hierarchy."""
 

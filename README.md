@@ -80,6 +80,10 @@ uv run flyhypo --neuron 387364605
 # Multi-level analysis — region ▸ subregion ▸ umbrella ▸ cell type ▸ neuron:
 uv run flyhypo EPG --hierarchy
 uv run flyhypo --neuron 387364605 --hierarchy
+
+# Cross-dataset replication — does the motif hold in another connectome?
+uv run flyhypo EPG --replicate                       # vs male-cns + banc (default)
+uv run flyhypo EPG --replicate male-cns:v1.0,banc:v888
 ```
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
@@ -121,6 +125,18 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > run once to warm the cache — the first uncached run makes many live neuPrint
 > calls and can be slow on a flaky connection.
 
+> **Cross-dataset replication (`--replicate`).** Checks whether a type's
+> connectivity motif recurs in **other connectomes on neuPrint** — by default
+> `male-cns:v1.0` (a male whole-CNS specimen) and `banc:v888` (brain+nerve cord) —
+> i.e. a different individual, even a different sex. It's **structural only** (no
+> LLM): it reports per-dataset cell counts, the **Jaccard agreement** of the
+> top-K partner-type sets vs the base, and a table of partner types that
+> **replicate across ≥2 datasets** (with side-by-side synapse weights) vs
+> dataset-specific ones. A motif that recurs across specimens is stronger
+> structural evidence; absolute weights still vary across individuals. (E.g.
+> `EPG`'s compass partners — ER*, PEN, Delta7, EL, PEG — replicate across
+> hemibrain ♀, male-cns ♂, and banc.)
+
 ### Web UI
 
 A minimal local web UI (stdlib-only, same `.env` tokens) wraps the CLI:
@@ -130,6 +146,11 @@ uv run flyhypo-web            # → http://127.0.0.1:8000
 ```
 
 ![flyhypo web UI — full EPG report](docs/screenshot.png)
+
+*Hierarchy mode (with the **Verify** toggle on) — functional roles at every level,
+region → cell type, each grounded in refs + connectivity:*
+
+![flyhypo web UI — hierarchy mode](docs/hierarchy.png)
 
 Type a cell type (or a numeric bodyId), pick **Full**, **Hierarchy** (region ▸
 subregion ▸ umbrella ▸ cell type ▸ neuron), or **Fingerprint only**, and the page
@@ -166,6 +187,7 @@ matching the connectome layer — not individual `bodyId`s.
 | `--neuron BODYID` | Single-neuron mode: fingerprint one bodyId instead of a cell type. |
 | `--hierarchy` | Analyze every level (region ▸ subregion ▸ umbrella/system ▸ cell type ▸ neuron), each with functional roles + refs. |
 | `--no-verify` | Skip the LLM verification pass (faster, ~half the tokens; citation hygiene still applied). Web UI: the **Verify** checkbox. |
+| `--replicate [DATASETS]` | Cross-dataset replication of the connectivity motif (structural, no LLM). Default compares vs `male-cns:v1.0,banc:v888`. |
 | `--fingerprint-only` | Stop after step 1 (no Gemini key needed). |
 | `--no-cache` | Bypass the on-disk query cache. |
 
@@ -184,8 +206,12 @@ unknown types.
 
 **Out of scope (clearly-marked TODOs — *not* built):**
 
-- [ ] Cross-dataset replication (e.g. confirm a motif in FlyWire as well as hemibrain).
-- [ ] FlyWire / Codex local DB. *(The later path is FlyWire/Codex static CSV + CAVE — **we do not scrape Codex**; this PoC uses the neuPrint API only.)*
+- [x] Cross-dataset replication — **done for neuPrint-hosted datasets** (`--replicate`
+  compares the motif across hemibrain / male-cns / banc). Adding **FlyWire** as a
+  replication target is the remaining piece (see below).
+- [ ] FlyWire / Codex local DB. *(The later path is FlyWire/Codex static CSV + CAVE —
+  **we do not scrape Codex**. neuPrint-based cross-dataset replication already works;
+  a FlyWire adapter would add FAFB ♀ as another replication dataset.)*
 - [ ] Virtual Fly Brain integration.
 - [x] Web UI — a minimal local one ships (`flyhypo-web`); a hosted/multi-user version is still out of scope.
 - [ ] Batch / evaluation harness.

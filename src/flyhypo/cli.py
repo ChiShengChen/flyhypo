@@ -12,7 +12,12 @@ import re
 import sys
 from pathlib import Path
 
-from .schema import HierarchyReport, Hypothesis, StructuralFingerprint
+from .schema import (
+    HierarchyReport,
+    Hypothesis,
+    ReplicationReport,
+    StructuralFingerprint,
+)
 
 
 def _slug(name: str) -> str:
@@ -228,6 +233,66 @@ def render_hierarchy_markdown(r: HierarchyReport) -> str:
     return "\n".join(L)
 
 
+def render_replication_markdown(r: ReplicationReport) -> str:
+    L: list[str] = []
+    L.append(f"# Cross-dataset replication: `{r.cell_type}`")
+    L.append("")
+    L.append(f"**Base dataset:** {r.base_dataset} · **compared with:** "
+             + ", ".join(d for d in r.datasets if d != r.base_dataset))
+    L.append("")
+    L.append("> Does the connectivity motif recur in another connectome (a different "
+             "specimen, even a different sex)? Replication across specimens is "
+             "stronger structural evidence — but weights still vary across individuals.")
+    L.append("")
+    L.append("## Datasets")
+    L.append("| dataset | type found | cells | predicted NT |")
+    L.append("|---|---|---|---|")
+    for s in r.summaries:
+        L.append(f"| {s.dataset} | {'yes' if s.found else '**no**'} | "
+                 f"{s.n_cells} | {s.predicted_nt or '—'} |")
+    L.append("")
+    L.append("## Motif agreement vs base (Jaccard of top partner-type sets)")
+    for ds in r.datasets:
+        if ds == r.base_dataset:
+            continue
+        L.append(f"- **{ds}** — upstream {r.upstream_agreement.get(ds, 0):.2f} · "
+                 f"downstream {r.downstream_agreement.get(ds, 0):.2f}")
+    L.append("")
+
+    def _ptable(title: str, items):
+        L.append(f"## {title}")
+        if not items:
+            L.append("_none_"); L.append(""); return
+        cols = " | ".join(r.datasets)
+        L.append(f"| partner | dir | {cols} |")
+        L.append("|---|---|" + "---|" * len(r.datasets))
+        for a in items:
+            cells = " | ".join(str(a.weights.get(ds, "—")) for ds in r.datasets)
+            L.append(f"| {a.partner_type} | {a.direction} | {cells} |")
+        L.append("")
+
+    _ptable(f"Replicated partners (in ≥2 datasets) — {len(r.replicated_partners)}",
+            r.replicated_partners)
+    _ptable(f"Dataset-specific partners — {len(r.divergent_partners)}",
+            r.divergent_partners)
+    L.append("## Notes")
+    L.append(r.notes)
+    L.append("")
+    return "\n".join(L)
+
+
+def _print_replication_summary(r: ReplicationReport) -> None:
+    print(f"\n=== flyhypo replication: {r.cell_type} (base {r.base_dataset}) ===")
+    for s in r.summaries:
+        print(f"  {s.dataset}: {'found ' + str(s.n_cells) + ' cells' if s.found else 'NOT found'}")
+    for ds in r.datasets:
+        if ds == r.base_dataset:
+            continue
+        print(f"  agreement vs base [{ds}]: up={r.upstream_agreement.get(ds,0):.2f} "
+              f"down={r.downstream_agreement.get(ds,0):.2f}")
+    print(f"  replicated partners (≥2 datasets): {len(r.replicated_partners)}")
+
+
 def _print_hierarchy_summary(r: HierarchyReport) -> None:
     print(f"\n=== flyhypo hierarchy: {r.query} ({r.dataset}) ===")
     print(f"  region={r.region} subregion={r.subregion} type={r.cell_type}"
@@ -280,6 +345,14 @@ def main(argv: list[str] | None = None) -> int:
              "cell_type ▸ neuron, each with functional roles + refs",
     )
     ap.add_argument(
+        "--replicate",
+        nargs="?",
+        const="",
+        metavar="DATASETS",
+        help="cross-dataset replication of the connectivity motif (structural, no "
+             "LLM). Optional comma-separated datasets; default male-cns:v1.0,banc:v888",
+    )
+    ap.add_argument(
         "--fingerprint-only",
         action="store_true",
         help="stop after the structural fingerprint (step 1; no API keys for LLM)",
@@ -290,6 +363,26 @@ def main(argv: list[str] | None = None) -> int:
 
     # Imported lazily so --help works without credentials/network.
     from . import connectome
+
+    # --- cross-dataset replication mode (structural, no LLM) ------------ #
+    if args.replicate is not None:
+        if not args.cell_type:
+            ap.error("--replicate needs a cell_type (replication is type-level)")
+        from . import replication
+
+        others = [d.strip() for d in args.replicate.split(",") if d.strip()] or None
+        report = replication.replicate(
+            args.cell_type, args.dataset, others, args.top_k,
+            use_cache=not args.no_cache,
+        )
+        out_dir = Path(args.out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        slug = _slug(args.cell_type + "_replication")
+        (out_dir / f"{slug}.json").write_text(report.model_dump_json(indent=2, by_alias=True))
+        (out_dir / f"{slug}.md").write_text(render_replication_markdown(report))
+        _print_replication_summary(report)
+        print(f"\nwrote {out_dir / (slug + '.json')} and {out_dir / (slug + '.md')}")
+        return 0
 
     # --- multi-level hierarchy mode ------------------------------------- #
     if args.hierarchy:
