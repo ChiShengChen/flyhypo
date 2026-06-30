@@ -72,6 +72,9 @@ uv run flyhypo EPG --fingerprint-only
 
 # Unknown type → graceful fuzzy suggestions, no crash:
 uv run flyhypo SA1 --fingerprint-only
+
+# Single-neuron mode — structural fingerprint for one bodyId:
+uv run flyhypo --neuron 387364605
 ```
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
@@ -88,6 +91,19 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > (pre/post sites summed over the cells); partner `w` / "synapse count" is the
 > **pairwise synapse count** (synapses between neuron pairs, summed over the type).
 > Both are structural proxies — not functional strength, sign, or reliability.
+
+> **Single-neuron mode & its limits.** `--neuron <bodyId>` (or a numeric query in
+> the web UI) fingerprints one individual neuron. The **structure** is genuinely
+> single-cell — its own partners, ROIs, and **topographic position** (instance +
+> sub-compartments, e.g. EB wedges / the PB glomerulus). But a single cell's
+> **function is inherited from its type**; its only cell-specific signal is *where
+> in the map* it sits. So hypotheses are **capped at `low` confidence** and the
+> report states the hard gaps explicitly: there is **no literature for an
+> individual neuron** (citations are type/region-level), connectivity is from
+> **one fly (n=1)** so a cell's wiring can't be separated from individual /
+> reconstruction idiosyncrasy, and synapse sign/strength/neuromodulation stay
+> unknown. Closing those needs cross-individual data (FlyWire) + single-cell
+> physiology — out of scope here.
 
 ### Web UI
 
@@ -126,6 +142,7 @@ matching the connectome layer — not individual `bodyId`s.
 | `--dataset` | neuPrint dataset (default `hemibrain:v1.2.1`). |
 | `--top-k` | Number of up/down-stream partner types to keep (default 15). |
 | `--out` | Output directory (default `outputs/`). |
+| `--neuron BODYID` | Single-neuron mode: fingerprint one bodyId instead of a cell type. |
 | `--fingerprint-only` | Stop after step 1 (no Gemini key needed). |
 | `--no-cache` | Bypass the on-disk query cache. |
 

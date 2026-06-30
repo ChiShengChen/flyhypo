@@ -149,6 +149,27 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
     client = _client()
     bundle = _evidence_bundle(fp, lit)
 
+    # Single-neuron mode needs a different framing (function is type-level; only
+    # topographic position is single-cell; n=1; no per-cell literature).
+    neuron_addendum = ""
+    if fp.is_neuron:
+        neuron_addendum = (
+            f"\n\nSINGLE-NEURON MODE: the query is ONE neuron (bodyId "
+            f"{fp.neuron_bodyId}, instance '{fp.neuron_instance}', type "
+            f"'{fp.neuron_type}', 1 of {fp.n_in_type} cells of that type). The "
+            "connectivity/ROIs in the evidence are for THIS individual cell. Its "
+            "computational function is a property of its TYPE; the only "
+            "single-cell-specific information is its TOPOGRAPHIC POSITION "
+            "(instance + sub_rois, e.g. EB wedges). Frame each hypothesis as: "
+            "'this cell is an instance of <type> localized to <position>, so the "
+            "<type-level function> applies to <that part of the map>'. There is "
+            "NO literature about this individual cell — cite type/region "
+            "literature only. Connectivity is from a single fly (n=1) and per-cell "
+            "weights are sparse/noisy. Therefore cap confidence at 'low'. State the "
+            "n=1, no-single-cell-literature, and type-inherited-function limits "
+            "explicitly in not_supported_by_connectivity and caveats."
+        )
+
     # --- pass 1: generate the grounded analysis ------------------------- #
     analysis, reasoning = _generate(
         client,
@@ -156,7 +177,7 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
         (
             f"Cell type: {fp.cell_type_query}\nDataset: {fp.dataset}\n\n"
             f"EVIDENCE:\n{bundle}\n\n"
-            "Produce the structured hypothesis analysis."
+            "Produce the structured hypothesis analysis." + neuron_addendum
         ),
         HypothesisAnalysis,
     )
@@ -206,6 +227,29 @@ def synthesize(fp: StructuralFingerprint, lit: list[LiteratureHit]) -> Hypothesi
                   f"evidence (anti-fabrication): {', '.join(sorted(stripped))}.")
     if downgrades:
         notes += "\n\n[auto] Confidence downgraded by verification: " + "; ".join(downgrades) + "."
+
+    # --- single-neuron guardrails: cap confidence + ensure the standard
+    #     single-cell limits are present regardless of what the model wrote. --- #
+    if fp.is_neuron:
+        capped = 0
+        for hyp in analysis.hypotheses:
+            if CONFIDENCE_RANK.get(hyp.confidence, 0) > CONFIDENCE_RANK["low"]:
+                hyp.confidence = "low"
+                capped += 1
+        auto_caveats = [
+            f"Single neuron (bodyId {fp.neuron_bodyId}): function is inherited from "
+            f"its type '{fp.neuron_type}'; the only single-cell-specific signal is "
+            "topographic position (instance / sub-ROIs).",
+            "n=1: connectivity is from a single hemibrain fly, so this individual "
+            "cell's wiring cannot be separated from reconstruction/developmental "
+            "idiosyncrasy without other individuals.",
+            "No literature exists for an individual neuron; cited papers are "
+            "type/region-level and apply only via type membership.",
+        ]
+        existing = set(analysis.caveats)
+        analysis.caveats += [c for c in auto_caveats if c not in existing]
+        if capped:
+            notes += f"\n\n[auto] Single-neuron mode: capped {capped} hypothesis confidence(s) at 'low'."
 
     return Hypothesis(
         cell_type=fp.cell_type_query,

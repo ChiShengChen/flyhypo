@@ -42,7 +42,9 @@ def _expand_roi(roi: str) -> str:
 def build_queries(fp: StructuralFingerprint) -> list[tuple[str, str]]:
     """Return (query, why-relevant) pairs derived from the fingerprint."""
     queries: list[tuple[str, str]] = []
-    ct = fp.cell_type_query
+    # In single-neuron mode the query string is "bodyId:NNN" (useless for search);
+    # there is no literature about an individual cell, so search by its TYPE.
+    ct = fp.neuron_type or fp.cell_type_query
 
     # 1. The type itself.
     queries.append((f'{ct} Drosophila neuron', f"exact cell type '{ct}'"))

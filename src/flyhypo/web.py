@@ -113,8 +113,9 @@ PAGE = """<!doctype html>
 </header>
 <main>
   <form id="f">
-    <label>Cell type
-      <input type="text" id="cell" value="EPG" autocomplete="off" required>
+    <label>Cell type / bodyId
+      <input type="text" id="cell" value="EPG" autocomplete="off" required
+             title="a cell type (EPG, MBON01) or a numeric bodyId for single-neuron mode">
     </label>
     <label>Dataset
       <input type="text" id="dataset" value="hemibrain:v1.2.1">
@@ -218,6 +219,14 @@ function renderFingerprint(fp){
     "(pre/post sites, ∑ over cells); partner <b>synapse count</b> is <b>pairwise</b> "+
     "(synapses between neuron pairs, ∑ over the type). Structural proxies, not functional strength.";
   head.appendChild(legend);
+  if(fp.neuron_bodyId){
+    const nb = el("div","kv"); nb.style.marginTop = "8px";
+    nb.innerHTML = "<b>Single neuron</b> — bodyId "+fp.neuron_bodyId+", instance <b>"+
+      (fp.neuron_instance||"?")+"</b>, type <b>"+(fp.neuron_type||"?")+"</b>"+
+      (fp.n_in_type?(" (1 of "+fp.n_in_type+" cells of this type)"):"")+
+      ". Function is inherited from its type; only topographic position is single-cell (see caveats).";
+    head.appendChild(nb);
+  }
   if(fp.suggestions && fp.suggestions.length){
     const sg = el("div","chips suggest"); sg.style.marginTop="10px";
     sg.appendChild(el("span","muted","Did you mean: "));
@@ -227,6 +236,8 @@ function renderFingerprint(fp){
     head.appendChild(sg);
   }
   out.appendChild(head);
+  if(fp.sub_rois && fp.sub_rois.length)
+    out.appendChild(roiTable("Topographic position (sub-compartments)", fp.sub_rois));
   out.appendChild(roiTable("Top input ROIs (postsynaptic sites)", fp.input_rois));
   out.appendChild(roiTable("Top output ROIs (presynaptic sites)", fp.output_rois));
   out.appendChild(partnerTable("Top upstream partners", fp.upstream));
@@ -525,7 +536,11 @@ class Handler(BaseHTTPRequestHandler):
         if not cell:
             return {"error": "cell_type is required"}
 
-        fp = connectome.build_fingerprint(cell, dataset, top_k)
+        # An all-digits query is treated as a bodyId (single-neuron mode).
+        if cell.isdigit():
+            fp = connectome.build_neuron_fingerprint(int(cell), dataset, top_k)
+        else:
+            fp = connectome.build_fingerprint(cell, dataset, top_k)
         if mode == "fingerprint" or not fp.found:
             # Fingerprint-only, OR not-found: skip the LLM for the pure-structure
             # view, but still synthesise for not-found in full mode (degraded).

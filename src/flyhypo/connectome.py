@@ -25,6 +25,7 @@ from neuprint import (
     NeuronCriteria,
     fetch_all_rois,
     fetch_neurons,
+    fetch_primary_rois,
     fetch_simple_connections,
 )
 from neuprint.client import default_client, set_default_client
@@ -199,6 +200,116 @@ def _connections(criteria_kwargs: dict, *, direction: str, client: Client) -> pd
         except Exception:
             continue
     return pd.DataFrame()
+
+
+def _subcompartments(roi_counts: pd.DataFrame, primary: set[str], top: int = 8) -> list[RoiWeight]:
+    """Fine sub-compartments (columnar position), e.g. EB wedges 'EBr2r4'.
+
+    A sub-compartment is a non-primary ROI whose name extends a primary ROI
+    (so 'EBr2r4' counts, but the coarse super-region 'CX' does not)."""
+    if roi_counts is None or roi_counts.empty:
+        return []
+    def is_sub(roi: str) -> bool:
+        return roi not in primary and any(roi.startswith(p) and roi != p for p in primary)
+    df = roi_counts[roi_counts["roi"].apply(is_sub)].copy()
+    if df.empty:
+        return []
+    df["w"] = df.get("post", 0).fillna(0) + df.get("pre", 0).fillna(0)
+    g = df.groupby("roi")["w"].sum().sort_values(ascending=False).head(top)
+    return [RoiWeight(roi=str(r), weight=int(w)) for r, w in g.items() if w > 0]
+
+
+def build_neuron_fingerprint(
+    body_id: int,
+    dataset: str = DEFAULT_DATASET,
+    top_k: int = 15,
+    *,
+    use_cache: bool = True,
+) -> StructuralFingerprint:
+    """Single-neuron structural fingerprint for one bodyId.
+
+    Structure is genuinely single-cell (this neuron's own partners/ROIs). What
+    distinguishes it from its type is mainly topographic position (instance +
+    sub-ROIs); function remains a type-level property. See README gaps.
+    """
+    cache_key = f"{dataset}|neuron:{body_id}|{top_k}"
+    if use_cache:
+        cached = cache.get("fingerprint", cache_key)
+        if cached is not None:
+            return StructuralFingerprint.model_validate(cached)
+
+    client = get_client(dataset)
+    neurons, roi_counts = fetch_neurons(
+        NeuronCriteria(bodyId=int(body_id), client=client), client=client
+    )
+
+    if neurons is None or neurons.empty:
+        fp = StructuralFingerprint(
+            cell_type_query=f"bodyId:{body_id}",
+            dataset=dataset,
+            notes=f"No neuron with bodyId {body_id} found in {dataset}.",
+        )
+        if use_cache:
+            cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+        return fp
+
+    row = neurons.iloc[0]
+    ntype = None if pd.isna(row.get("type")) else str(row["type"])
+    instance = None if pd.isna(row.get("instance")) else str(row["instance"])
+    resolved = [ResolvedInstance(bodyId=int(row["bodyId"]), type=ntype, instance=instance)]
+
+    n_in_type = None
+    if ntype:
+        try:
+            # omit_rois=True returns a single DataFrame (not a tuple).
+            tdf = fetch_neurons(
+                NeuronCriteria(type=ntype, regex=False, client=client),
+                omit_rois=True, client=client,
+            )
+            n_in_type = int(len(tdf))
+        except Exception:
+            pass
+
+    predicted_nt = None
+    nt_series = _safe_col(neurons, "predictedNt", "consensusNt", "celltypePredictedNt")
+    nt_note = ""
+    if nt_series is not None:
+        vals = [x for x in nt_series.tolist() if isinstance(x, str) and x]
+        if vals:
+            predicted_nt = vals[0]
+    else:
+        nt_note = " Neurotransmitter/class not provided by this dataset."
+
+    try:
+        primary = set(fetch_primary_rois(client=client))
+    except Exception:
+        primary = set(roi_counts["roi"].unique()) if roi_counts is not None else set()
+
+    crit = {"bodyId": int(body_id)}
+    fp = StructuralFingerprint(
+        cell_type_query=f"bodyId:{body_id}",
+        dataset=dataset,
+        resolved=resolved,
+        predicted_nt=predicted_nt,
+        input_rois=_aggregate_rois(roi_counts, primary, "post"),
+        output_rois=_aggregate_rois(roi_counts, primary, "pre"),
+        upstream=_partners(_connections(crit, direction="upstream", client=client), "pre", top_k),
+        downstream=_partners(_connections(crit, direction="downstream", client=client), "post", top_k),
+        neuron_bodyId=int(body_id),
+        neuron_instance=instance,
+        neuron_type=ntype,
+        n_in_type=n_in_type,
+        sub_rois=_subcompartments(roi_counts, primary),
+        notes=(
+            f"Single neuron bodyId {body_id}"
+            + (f" — instance '{instance}', type '{ntype}'" if ntype else "")
+            + (f" (1 of {n_in_type} cells of this type)" if n_in_type else "")
+            + "." + nt_note
+        ),
+    )
+    if use_cache:
+        cache.put("fingerprint", cache_key, fp.model_dump(by_alias=True))
+    return fp
 
 
 def build_fingerprint(

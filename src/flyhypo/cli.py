@@ -54,6 +54,20 @@ def render_markdown(h: Hypothesis) -> str:
         "Both are structural proxies — not functional strength."
     )
     L.append("")
+    if fp.is_neuron:
+        L.append(
+            f"- **Single neuron:** bodyId `{fp.neuron_bodyId}` — instance "
+            f"`{fp.neuron_instance or '?'}` — type `{fp.neuron_type or '?'}`"
+            + (f" (1 of {fp.n_in_type} cells of this type)" if fp.n_in_type else "")
+        )
+        if fp.sub_rois:
+            sub = ", ".join(f"{r.roi} ({r.weight})" for r in fp.sub_rois)
+            L.append(f"- **Topographic position (sub-compartments):** {sub}")
+        L.append(
+            "- _Single-cell scope: structure is this individual cell; its "
+            "**function is inherited from its type**, localized to the position "
+            "above. See caveats (n=1, no single-cell literature)._"
+        )
     L.append(f"- **Predicted neurotransmitter:** {fp.predicted_nt or 'unknown'}")
     if fp.input_rois:
         rois = ", ".join(f"{r.roi} ({r.weight})" for r in fp.input_rois)
@@ -159,7 +173,12 @@ def _print_summary(h: Hypothesis) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="flyhypo", description=__doc__)
-    ap.add_argument("cell_type", help="fly cell type, e.g. EPG, MBON01, SA1")
+    ap.add_argument("cell_type", nargs="?", help="fly cell type, e.g. EPG, MBON01, SA1")
+    ap.add_argument(
+        "--neuron", type=int, metavar="BODYID",
+        help="single-neuron mode: build a structural fingerprint for one bodyId "
+             "(function is inherited from its type; see caveats)",
+    )
     ap.add_argument("--dataset", default="hemibrain:v1.2.1")
     ap.add_argument("--top-k", type=int, default=15)
     ap.add_argument("--out", default="outputs/")
@@ -170,13 +189,22 @@ def main(argv: list[str] | None = None) -> int:
         help="stop after the structural fingerprint (step 1; no API keys for LLM)",
     )
     args = ap.parse_args(argv)
+    if not args.cell_type and args.neuron is None:
+        ap.error("provide a cell_type, or --neuron BODYID for single-neuron mode")
 
     # Imported lazily so --help works without credentials/network.
     from . import connectome
 
-    fp = connectome.build_fingerprint(
-        args.cell_type, args.dataset, args.top_k, use_cache=not args.no_cache
-    )
+    if args.neuron is not None:
+        fp = connectome.build_neuron_fingerprint(
+            args.neuron, args.dataset, args.top_k, use_cache=not args.no_cache
+        )
+        label = f"bodyId_{args.neuron}"
+    else:
+        fp = connectome.build_fingerprint(
+            args.cell_type, args.dataset, args.top_k, use_cache=not args.no_cache
+        )
+        label = args.cell_type
 
     if args.fingerprint_only:
         print(fp.model_dump_json(indent=2, by_alias=True))
@@ -189,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
-    slug = _slug(args.cell_type)
+    slug = _slug(label)
     (out_dir / f"{slug}.json").write_text(
         result.model_dump_json(indent=2, by_alias=True)
     )

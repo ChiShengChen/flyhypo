@@ -55,9 +55,23 @@ class StructuralFingerprint(BaseModel):
     suggestions: list[str] = Field(default_factory=list)
     notes: str | None = None
 
+    # --- single-neuron mode (populated only when querying ONE bodyId) ----- #
+    # In this mode the connectivity/ROIs above are for this individual cell.
+    # The one thing that distinguishes a cell from its type is its TOPOGRAPHIC
+    # POSITION (instance + sub-ROIs), so we surface it explicitly.
+    neuron_bodyId: int | None = None
+    neuron_instance: str | None = None
+    neuron_type: str | None = None
+    n_in_type: int | None = None  # how many cells share this neuron's type
+    sub_rois: list[RoiWeight] = Field(default_factory=list)  # columnar/compartment position
+
     @property
     def found(self) -> bool:
         return len(self.resolved) > 0
+
+    @property
+    def is_neuron(self) -> bool:
+        return self.neuron_bodyId is not None
 
 
 # --------------------------------------------------------------------------- #
