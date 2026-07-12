@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from .verify import default_judge, verify_analysis
 from .schema import (
     HierarchyAnalysis,
     HierarchyReport,
@@ -82,6 +83,12 @@ in connectivity_basis (e.g. "receives 14903 synapses from ER4m"), and a \
 confidence. Every role MUST have at least one reference or one connectivity_basis \
 entry — never list a function you cannot ground. Order roles most- to \
 least-supported.
+
+8. For any role or hypothesis backed by literature, set `quote` to a VERBATIM span \
+copied CHARACTER-FOR-CHARACTER from the cited paper's abstract snippet (<= ~300 chars, \
+one sentence), and it MUST name the focus cell type. This quote is re-greped against the \
+abstract by an independent verifier — a paraphrased, stitched, or absent quote drops the \
+claim. Leave `quote` empty ONLY for connectivity-only claims.
 
 Be specific and quantitative. Prefer fewer, well-grounded hypotheses over many \
 vague ones."""
@@ -257,41 +264,18 @@ def synthesize(
         stripped.update(set(role.references) - set(kept))
         role.references = kept
 
-    # --- pass 2: verify each statement against the evidence (optional) -- #
-    downgrades: list[str] = []
+    # --- pass 2: independent verification (paper-evidence, NOT same-model) -- #
+    # verbatim re-grep + mis-attribution guard + cross-family judge + citation/retraction
+    # + deterministic grading, replacing the old Gemini-checks-Gemini pass.
     if verify:
-        verification, _ = _generate(
-            client,
-            VERIFY_SYSTEM,
-            (
-                f"EVIDENCE:\n{bundle}\n\n"
-                f"Valid literature ids: {sorted(valid_ids)}\n\n"
-                f"PROPOSED HYPOTHESES:\n{analysis.model_dump_json(indent=2)}\n\n"
-                "Return your verification."
-            ),
-            VerificationResult,
-        )
-        verification = verification or VerificationResult(
-            verification_notes="(verification pass returned no output)"
-        )
-        # reasoning-driven gating: apply verifier downgrades (never upgrade).
-        for adj in verification.confidence_adjustments:
-            i = adj.hypothesis_index - 1
-            if not (0 <= i < len(analysis.hypotheses)):
-                continue
-            hyp = analysis.hypotheses[i]
-            cur, rec = hyp.confidence, adj.recommended_confidence
-            if CONFIDENCE_RANK.get(rec, 99) < CONFIDENCE_RANK.get(cur, 0):
-                downgrades.append(f"H{adj.hypothesis_index} {cur}→{rec} ({adj.reason})")
-                hyp.confidence = rec
-        notes = verification.verification_notes
+        subject_names = [fp.cell_type_query] + [r.type for r in fp.resolved if r.type]
+        vres = verify_analysis(analysis, lit, subject_names, judge=default_judge())
+        notes = vres["notes"]
     else:
         notes = "[auto] Verification pass skipped (fast mode); citation hygiene still applied."
     if stripped:
         notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
                   f"evidence (anti-fabrication): {', '.join(sorted(stripped))}.")
-    if downgrades:
-        notes += "\n\n[auto] Confidence downgraded by verification: " + "; ".join(downgrades) + "."
 
     # --- single-neuron guardrails: cap confidence + ensure the standard
     #     single-cell limits are present regardless of what the model wrote. --- #
