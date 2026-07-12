@@ -96,7 +96,8 @@ def verify_claim(*, claim_text: str, quote: str, references: list[str],
     # deterministic grade (abstract-only for literature; None quote -> silence -> Unknown)
     if is_lit:
         state = evidence_state.classify(verbatim_ok=bool(verbatim_ok), faithful=faithful,
-                                        subject_named=subject_named, abstract_only=True)
+                                        subject_named=subject_named, abstract_only=True,
+                                        modality=evidence_state.claim_modality(claim_text))
     else:
         state = {"state": "Supported", "confidence": "Med", "overclaim_risk": False,
                  "reasons": ["connectivity-grounded (not literature-verified here)"]}

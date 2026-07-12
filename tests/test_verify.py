@@ -163,3 +163,15 @@ def test_recall_audit_no_survey(monkeypatch):
     hits = [LiteratureHit(title="EPG encodes heading", source="pubmed", id="222", snippet="s", relevance="r")]
     au = L.recall_audit(hits)
     assert au["survey"] is None and au["recall"] is None
+
+
+def test_hedged_role_confidence_capped(monkeypatch):
+    _no_citation_check(monkeypatch)
+    Q = "The EPG neurons form a ring attractor that encodes the fly's heading direction"
+    # same quote/subject; only the claim's WORDING differs (hedged vs asserted)
+    hedged = _analysis([_role("EPG neurons may encode heading direction", Q)])
+    V.verify_analysis(hedged, LIT, ["EPG"], judge=None)
+    assert hedged.functional_roles[0].confidence == "low"       # 'may' -> hedged -> capped
+    asserted = _analysis([_role("EPG neurons encode heading direction", Q)])
+    V.verify_analysis(asserted, LIT, ["EPG"], judge=None)
+    assert asserted.functional_roles[0].confidence == "medium"  # abstract-only default
