@@ -131,3 +131,35 @@ def test_snowball_dedups_across_directions(monkeypatch):
     monkeypatch.setattr(L, "_edge_records", fake_edges)
     out = L.snowball(["12345678"], direction="both", max_per_seed=10)
     assert sorted(r["id"] for r in out) == ["10.1/a", "10.1/b"]
+
+
+# --------------------------------------------------------------------------- #
+# recall-audit (survey references vs retrieved set) — offline, snowball faked
+# --------------------------------------------------------------------------- #
+def test_is_survey():
+    from flyhypo import literature as L
+    assert L.is_survey("A survey of the central complex") and L.is_survey("EPG: a review")
+    assert not L.is_survey("EPG neurons encode heading")
+
+
+def test_recall_audit(monkeypatch):
+    from flyhypo import literature as L
+    hits = [
+        LiteratureHit(title="A review of the fly compass", source="pubmed", id="111",
+                      snippet="s", relevance="survey"),
+        LiteratureHit(title="EPG ring attractor", source="pubmed", id="222", snippet="s", relevance="r"),
+    ]
+    # the survey (id 111) cites: 222 (we have it) + 999 (a miss)
+    monkeypatch.setattr(L, "snowball",
+                        lambda seeds, **k: [{"id": "222", "title": "EPG ring attractor", "year": 2020},
+                                            {"id": "999", "title": "Uncovered paper", "year": 2019}])
+    au = L.recall_audit(hits)
+    assert au["survey"].startswith("A review") and au["n_refs"] == 2 and au["n_found"] == 1
+    assert au["recall"] == 0.5 and au["misses"][0]["id"] == "999"
+
+
+def test_recall_audit_no_survey(monkeypatch):
+    from flyhypo import literature as L
+    hits = [LiteratureHit(title="EPG encodes heading", source="pubmed", id="222", snippet="s", relevance="r")]
+    au = L.recall_audit(hits)
+    assert au["survey"] is None and au["recall"] is None

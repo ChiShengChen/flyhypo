@@ -94,16 +94,18 @@ premise to exceed Med confidence.
 
 ## Migration path (incremental, each a small PR)
 
-1. Add `paper-evidence` as a dependency; wrap each generated role as a card `{subject, claim, quote, numbers}`.
-2. Replace the same-model verify pass with `quote_gate.build(..., judge=make_judge())` (verbatim +
+1. ✅ Add `paper-evidence` as a dependency; wrap each generated role as a card `{subject, claim, quote, numbers}`.
+2. ✅ Replace the same-model verify pass with `quote_gate.build(..., judge=make_judge())` (verbatim +
    numbers-in-context + mis-attribution + cross-family judge). Drop failing cards, don't "downgrade".
-3. Run `citation.verify_citation` on every cited PMID/DOI; drop unverified, flag `RETRACTED`.
-4. Replace LLM confidence with `evidence_state.classify` (keep the model's tier only as a hint).
-5. Add the `recall` layer (saturation + snowball + audit) to `literature.py`; then `semantic` anchoring.
-6. Add `deepread` for OA hits to lift the abstract-only confidence ceiling.
+3. ✅ Run `citation.verify_citation` on every cited PMID/DOI; drop unverified, flag `RETRACTED`.
+4. ✅ Replace LLM confidence with `evidence_state.classify`.
+5. ✅ `recall` layer — saturation (`recall.saturated`) + snowball (`literature.snowball`, self-contained
+   Semantic Scholar) + audit (`literature.recall_audit`); `semantic` re-ranking via `FLYHYPO_SEMANTIC`.
+6. ◻︎ `deepread` for OA hits — `literature.deep_read_hit()` exists as an opt-in hook, but is NOT wired
+   into the default flow (it departs from the abstracts-only policy — a deliberate design decision).
 
-Steps 1–4 are the high-value core (independent verification + real citations + honest grading);
-5–6 are recall/depth. None require changing the connectome layer.
+Steps 1–5 are done (main + hierarchy paths). Step 6 is an opt-in hook pending a call on whether to
+relax the abstracts-only policy for the open-access subset. None required changing the connectome layer.
 
 ## Why reuse `paper-evidence`
 
