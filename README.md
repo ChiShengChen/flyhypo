@@ -42,6 +42,15 @@ cell type ─▶ connectome.py ─▶ StructuralFingerprint ─┐
 | `synthesize.py` | Gemini (with explicit reasoning) generates tiered hypotheses; a verification pass then **downgrades** any over-stated confidence and the pipeline **strips any cited id not in the evidence**. The model's thought summary is surfaced as `reasoning_summary`. |
 | `cli.py` | `flyhypo <cell_type> …` → writes `<cell_type>.json` + `.md`, prints a summary. |
 
+> **Grounding & verification — where this is going.** The current verify step is a single
+> *same-model* second pass. [`ARCHITECTURE.md`](ARCHITECTURE.md) lays out the target: a layered,
+> mostly-deterministic anti-hallucination stack — verbatim quote re-grep, numbers-in-context, a
+> **mis-attribution guard** (the cell type must be named in its own quote), a **cross-family judge**
+> (so it isn't Gemini grading Gemini), **citation reality + retraction checks**, and **deterministic
+> evidence grading** (abstract-only caps confidence; silence ≠ contradiction) — plus saturation +
+> snowball recall and semantic retrieval. It reuses [`paper-evidence`](https://github.com/ChiShengChen/paper-evidence)
+> as the verification library; flyhypo stays the connectome + fly-domain application.
+
 ---
 
 ## Prerequisites
