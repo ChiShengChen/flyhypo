@@ -173,6 +173,21 @@ def fetch_literature(
             )
         new_counts.append(len(hits) - before)
 
+    # Optional citation snowball (FLYHYPO_SNOWBALL=1): expand from the top hits via
+    # references + citations, catching relevant papers no keyword query guessed.
+    if os.environ.get("FLYHYPO_SNOWBALL") == "1" and hits:
+        seeds = [h.id for h in list(hits.values())[:3] if h.id and h.id != "n/a"]
+        for rec in snowball(seeds, max_per_seed=15):
+            pid = rec["id"] or rec["title"]
+            if not pid or pid in hits:
+                continue
+            abstract = rec["abstract"]
+            snippet = (abstract[:500] + "…") if len(abstract) > 500 else abstract
+            hits[pid] = LiteratureHit(
+                title=rec["title"], source="s2-snowball", id=rec["id"] or "n/a",
+                year=rec.get("year"), snippet=snippet or "(no abstract available)",
+                relevance="snowballed (references/citations of a top hit)")
+
     values = list(hits.values())
 
     # Optional semantic re-ranking (FLYHYPO_SEMANTIC=1): order hits by embedding
@@ -193,6 +208,79 @@ def fetch_literature(
     # order (semantic if enabled, else query order — exact cell type first).
     ranked = sorted(values, key=lambda h: 0 if h.source == "pubmed" else 1)
     return ranked[:max_hits]
+
+
+# --------------------------------------------------------------------------- #
+# Citation snowball (Semantic Scholar) — recall a query never guessed.
+# Self-contained (stdlib urllib), so flyhypo needs no external skill. Set
+# SEMANTIC_SCHOLAR_API_KEY to avoid 429s; degrades gracefully to [] on failure.
+# --------------------------------------------------------------------------- #
+_S2 = "https://api.semanticscholar.org/graph/v1"
+
+
+def _seed_ref(hit_id: str) -> str | None:
+    """A cited hit id -> a Semantic Scholar paper reference (PMID:/DOI:/ARXIV:)."""
+    import re
+    s = str(hit_id or "").strip()
+    if s.isdigit():
+        return f"PMID:{s}"
+    if re.match(r"^\d{4}\.\d{4,5}", s):
+        return f"ARXIV:{s.split('v')[0]}"
+    m = re.search(r"10\.\d{4,}/\S+", s)
+    if m:
+        return f"DOI:{m.group(0)}"
+    return None
+
+
+def _s2_get(path: str, params: dict):
+    import json
+    import urllib.parse
+    import urllib.request
+    url = f"{_S2}/{path}?" + urllib.parse.urlencode(params)
+    headers = {"User-Agent": "flyhypo/0.1"}
+    key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
+    if key:
+        headers["x-api-key"] = key
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=20) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001 — 429 / offline -> no snowball, not a crash
+        return None
+
+
+def _edge_records(seed_ref: str, direction: str, limit: int) -> list[dict]:
+    node = "references" if direction == "refs" else "citations"
+    inner = "citedPaper" if direction == "refs" else "citingPaper"
+    js = _s2_get(f"paper/{seed_ref}/{node}",
+                 {"fields": "title,abstract,year,externalIds", "limit": min(limit, 100)})
+    out = []
+    for d in (js or {}).get("data", []):
+        p = d.get(inner) or {}
+        if not p.get("title"):
+            continue
+        ext = p.get("externalIds") or {}
+        pid = ext.get("DOI") or (str(ext["PubMed"]) if ext.get("PubMed") else "") or p.get("paperId", "")
+        out.append({"id": pid, "title": p["title"], "abstract": p.get("abstract") or "",
+                    "year": p.get("year")})
+    return out
+
+
+def snowball(seed_ids: list[str], *, direction: str = "both",
+             max_per_seed: int = 15) -> list[dict]:
+    """References + citations of the seed papers (dedup), via Semantic Scholar."""
+    dirs = ["refs", "cites"] if direction == "both" else [direction]
+    out, seen = [], set()
+    for sid in seed_ids:
+        ref = _seed_ref(sid)
+        if not ref:
+            continue
+        for d in dirs:
+            for rec in _edge_records(ref, d, max_per_seed):
+                key = rec["id"] or rec["title"]
+                if key and key not in seen:
+                    seen.add(key)
+                    out.append(rec)
+    return out
 
 
 def deep_read_hit(hit: LiteratureHit, *, contact_email: str | None = None) -> str | None:

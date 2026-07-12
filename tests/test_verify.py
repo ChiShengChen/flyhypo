@@ -107,3 +107,27 @@ def test_deep_read_hit_routing(monkeypatch):
     assert literature.deep_read_hit(arxiv_hit) == "FULLTEXT" and calls.get("arxiv") == "2605.10817"
     pmid_hit = LiteratureHit(title="t", source="pubmed", id="12345678", snippet="s", relevance="r")
     assert literature.deep_read_hit(pmid_hit) is None    # PMID needs an OA resolver — skipped
+
+
+# --------------------------------------------------------------------------- #
+# citation snowball (Semantic Scholar) — offline, edges faked
+# --------------------------------------------------------------------------- #
+def test_seed_ref_routing():
+    from flyhypo import literature as L
+    assert L._seed_ref("12345678") == "PMID:12345678"
+    assert L._seed_ref("2605.10817v2") == "ARXIV:2605.10817"
+    assert L._seed_ref("10.1038/nature14539") == "DOI:10.1038/nature14539"
+    assert L._seed_ref("not-an-id") is None
+
+
+def test_snowball_dedups_across_directions(monkeypatch):
+    from flyhypo import literature as L
+
+    def fake_edges(ref, direction, limit):
+        a = {"id": "10.1/a", "title": "A", "abstract": "x", "year": 2020}
+        b = {"id": "10.1/b", "title": "B", "abstract": "y", "year": 2021}
+        return [a] if direction == "refs" else [a, b]   # 'a' appears in both -> deduped
+
+    monkeypatch.setattr(L, "_edge_records", fake_edges)
+    out = L.snowball(["12345678"], direction="both", max_per_seed=10)
+    assert sorted(r["id"] for r in out) == ["10.1/a", "10.1/b"]
