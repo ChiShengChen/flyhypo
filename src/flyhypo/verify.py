@@ -110,6 +110,16 @@ def verify_claim(*, claim_text: str, quote: str, references: list[str],
             "reasons": reasons}
 
 
+def verify_roles(roles: list, lit: list[LiteratureHit], subject_names: list[str], *,
+                 judge: Any = None, check_citations: bool = True) -> tuple[list, list[str]]:
+    """Verify a plain list of FunctionalRole in place (drop unverified, strip bad cites,
+    re-tier confidence). Returns (kept_roles, dropped_labels). Used by the hierarchy path."""
+    from types import SimpleNamespace
+    holder = SimpleNamespace(functional_roles=list(roles), hypotheses=[])
+    res = verify_analysis(holder, lit, subject_names, judge=judge, check_citations=check_citations)
+    return holder.functional_roles, res["dropped"]
+
+
 def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
                     subject_names: list[str], *, judge: Any = None,
                     check_citations: bool = True) -> dict[str, Any]:

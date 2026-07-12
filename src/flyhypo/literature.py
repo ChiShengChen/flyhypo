@@ -125,9 +125,20 @@ def fetch_literature(
     queries = build_queries(fp)
     hits: dict[str, LiteratureHit] = {}  # dedup by id (or title)
 
+    # Saturation-aware retrieval: stop once k consecutive queries add nothing new
+    # (recall.saturated), instead of only the fixed max_hits*2 cap. Coverage-honest.
+    try:
+        from paper_evidence.recall import new_count, saturated
+    except Exception:  # noqa: BLE001 — degrade to the fixed cap if paper-evidence absent
+        new_count = saturated = None
+    new_counts: list[int] = []
+
     for query, why in queries:
         if len(hits) >= max_hits * 2:
             break
+        if saturated and saturated(new_counts, k=3):
+            break
+        before = len(hits)
         cache_key = query
         papers_raw = cache.get("lit", cache_key) if use_cache else None
         if papers_raw is None:
@@ -160,11 +171,53 @@ def fetch_literature(
                 snippet=snippet or "(no abstract available)",
                 relevance=why,
             )
+        new_counts.append(len(hits) - before)
+
+    values = list(hits.values())
+
+    # Optional semantic re-ranking (FLYHYPO_SEMANTIC=1): order hits by embedding
+    # similarity to the cell's functional question, so a relevant paper that shares
+    # no keywords with the query still floats up. Falls back silently if unavailable.
+    if os.environ.get("FLYHYPO_SEMANTIC") == "1" and values:
+        try:
+            from paper_evidence.semantic import rank_chunks, embed_texts
+            ct = fp.neuron_type or fp.cell_type_query
+            question = f"functional role of {ct} neurons in the Drosophila brain"
+            docs = [f"{h.title}. {h.snippet}" for h in values]
+            order = rank_chunks(question, docs, embed_texts, k=len(docs))
+            values = [values[i] for i, _, _ in order]
+        except Exception:  # noqa: BLE001 — embeddings optional
+            pass
 
     # Rank PubMed (keyword-relevant) ahead of other sources, then preserve
-    # insertion order — which follows query order (exact cell type first), so
-    # the most on-topic hits stay on top. We deliberately do NOT sort by year.
-    ranked = sorted(
-        hits.values(), key=lambda h: 0 if h.source == "pubmed" else 1
-    )
+    # order (semantic if enabled, else query order — exact cell type first).
+    ranked = sorted(values, key=lambda h: 0 if h.source == "pubmed" else 1)
     return ranked[:max_hits]
+
+
+def deep_read_hit(hit: LiteratureHit, *, contact_email: str | None = None) -> str | None:
+    """EXPERIMENTAL, opt-in — fetch a hit's full text (arXiv / OA PDF URL) so verification
+    has more than the abstract to re-grep against, lifting the abstract-only confidence cap
+    for that paper. Returns the full text, or None if not open-access / not fetchable.
+
+    This deliberately departs from flyhypo's default "abstracts only" policy, so it is NOT
+    wired into the pipeline — call it explicitly (e.g. behind FLYHYPO_DEEP_READ) when you
+    want full-text grounding for the open-access subset. Requires paper-evidence[pdf].
+    """
+    try:
+        from paper_evidence.deepread import load_text
+    except Exception:  # noqa: BLE001
+        return None
+    ident = str(hit.id or "")
+    kwargs: dict = {"contact_email": contact_email}
+    import re as _re
+    if _re.match(r"^\d{4}\.\d{4,5}", ident):
+        kwargs["arxiv"] = ident
+    elif ident.lower().startswith("http"):
+        kwargs["url"] = ident
+    else:
+        return None  # PMIDs / bare DOIs need an OA resolver — out of scope for this helper
+    try:
+        return load_text(**kwargs)
+    except Exception:  # noqa: BLE001
+        return None

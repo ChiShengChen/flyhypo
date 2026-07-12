@@ -81,3 +81,29 @@ def test_cite_args_routing():
     assert V._cite_args("12345678", None) == {"pmid": "12345678", "title": None}
     assert V._cite_args("2605.10817", None)["arxiv"] == "2605.10817"
     assert V._cite_args("10.1038/nature14539", None)["doi"] == "10.1038/nature14539"
+
+
+# --------------------------------------------------------------------------- #
+# verify_roles (hierarchy helper) + deep_read_hit routing
+# --------------------------------------------------------------------------- #
+def test_verify_roles_drops_and_keeps(monkeypatch):
+    _no_citation_check(monkeypatch)
+    roles = [
+        _role("heading encoding",
+              "The EPG neurons form a ring attractor that encodes the fly's heading direction"),
+        _role("visual memory", "EPG neurons store visual place memories in the calyx"),  # fabricated
+    ]
+    kept, dropped = V.verify_roles(roles, LIT, ["EPG"], judge=None)
+    assert len(kept) == 1 and kept[0].function == "heading encoding" and len(dropped) == 1
+
+
+def test_deep_read_hit_routing(monkeypatch):
+    from flyhypo import literature
+    import paper_evidence.deepread as dr
+    calls = {}
+    monkeypatch.setattr(dr, "load_text", lambda **k: calls.update(k) or "FULLTEXT")
+    arxiv_hit = LiteratureHit(title="t", source="arxiv", id="2605.10817",
+                              snippet="s", relevance="r")
+    assert literature.deep_read_hit(arxiv_hit) == "FULLTEXT" and calls.get("arxiv") == "2605.10817"
+    pmid_hit = LiteratureHit(title="t", source="pubmed", id="12345678", snippet="s", relevance="r")
+    assert literature.deep_read_hit(pmid_hit) is None    # PMID needs an OA resolver — skipped
