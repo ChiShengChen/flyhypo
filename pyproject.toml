@@ -13,6 +13,9 @@ dependencies = [
     "paper-search-mcp>=0.1.3",
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
+    # verification layer: verbatim quote gate, mis-attribution guard, cross-family judge,
+    # citation/retraction checks, evidence grading (its core is stdlib / zero-dep)
+    "paper-evidence @ git+https://github.com/ChiShengChen/paper-evidence",
 ]
 
 [project.scripts]

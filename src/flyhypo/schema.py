@@ -97,10 +97,10 @@ class HypothesisItem(BaseModel):
     supporting_structure: list[str] = Field(default_factory=list)
     # Literature ids (PMID/DOI) that back this statement.
     supporting_literature: list[str] = Field(default_factory=list)
+    # A VERBATIM span copied from a cited paper's abstract that grounds this statement.
+    # Re-greped against the abstract by verify.py — empty for connectivity-only claims.
+    quote: str = ""
     confidence: Confidence
-
-
-class ProposedExperiment(BaseModel):
     hypothesis_ref: str  # e.g. "H1" — references the statement it would test
     method: str  # optogenetics / calcium imaging / behavioural assay / ...
     expected_result: str
@@ -118,6 +118,9 @@ class FunctionalRole(BaseModel):
     evidence_type: Literal["literature", "connectivity", "both"]
     references: list[str] = Field(default_factory=list)  # paper ids (PMID/DOI)
     connectivity_basis: list[str] = Field(default_factory=list)  # fingerprint numbers
+    # A VERBATIM span copied from a cited paper's abstract that grounds this role.
+    # Re-greped against the abstract by verify.py — empty for connectivity-only roles.
+    quote: str = ""
     confidence: Confidence
 
 
