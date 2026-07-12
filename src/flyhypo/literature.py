@@ -8,6 +8,9 @@ partner types. We keep ONLY abstracts/metadata — never full text.
 
 from __future__ import annotations
 
+import os
+import re
+
 from . import cache
 from .schema import LiteratureHit, StructuralFingerprint
 
@@ -207,6 +210,16 @@ def fetch_literature(
     # Rank PubMed (keyword-relevant) ahead of other sources, then preserve
     # order (semantic if enabled, else query order — exact cell type first).
     ranked = sorted(values, key=lambda h: 0 if h.source == "pubmed" else 1)
+
+    # Optional coverage diagnostic (FLYHYPO_RECALL_AUDIT=1): diff a survey's references
+    # against what we retrieved -> a recall number + the honest gap.
+    if os.environ.get("FLYHYPO_RECALL_AUDIT") == "1":
+        import sys
+        au = recall_audit(ranked)
+        if au["recall"] is not None:
+            print(f"[recall-audit] vs '{au['survey'][:50]}': recall {au['recall']} "
+                  f"({au['n_found']}/{au['n_refs']}), {len(au['misses'])} miss(es)", file=sys.stderr)
+
     return ranked[:max_hits]
 
 
@@ -281,6 +294,41 @@ def snowball(seed_ids: list[str], *, direction: str = "both",
                     seen.add(key)
                     out.append(rec)
     return out
+
+
+_SURVEY = re.compile(r"\b(survey|review|overview|systematic|meta-?analysis)\b", re.I)
+
+
+def is_survey(title: str) -> bool:
+    return bool(_SURVEY.search(title or ""))
+
+
+def _norm_title(t: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(t or "").lower()).strip()
+
+
+def recall_audit(hits: list[LiteratureHit], *, max_refs: int = 40) -> dict:
+    """Measure coverage: pick a survey/review among the hits, pull its reference list, and
+    diff it against the retrieved set. Returns a concrete recall number + the misses (papers
+    the survey cites that we don't have — the honest gap). recall is None if no survey found."""
+    survey = next((h for h in hits if is_survey(h.title) and _seed_ref(h.id)), None)
+    if survey is None:
+        return {"survey": None, "recall": None, "n_refs": 0, "n_found": 0, "misses": []}
+    refs = snowball([survey.id], direction="refs", max_per_seed=max_refs)
+    ledger = {h.id for h in hits if h.id and h.id != "n/a"} | {_norm_title(h.title) for h in hits}
+    found, misses, seen = 0, [], set()
+    for r in refs:
+        key = r["id"] or _norm_title(r["title"])
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        if (r["id"] and r["id"] in ledger) or _norm_title(r["title"]) in ledger:
+            found += 1
+        else:
+            misses.append({"id": r["id"], "title": r["title"], "year": r.get("year")})
+    n = found + len(misses)
+    return {"survey": survey.title, "recall": (round(found / n, 3) if n else None),
+            "n_refs": n, "n_found": found, "misses": misses}
 
 
 def deep_read_hit(hit: LiteratureHit, *, contact_email: str | None = None) -> str | None:
