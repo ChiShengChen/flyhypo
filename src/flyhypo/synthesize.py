@@ -280,6 +280,13 @@ def synthesize(
         notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
                   f"evidence (anti-fabrication): {', '.join(sorted(stripped))}.")
 
+    # --- deterministic connectivity-number guard (always on): every synapse-scale
+    #     number a claim cites must exist in the fingerprint / replication. ------- #
+    from .numverify import check_analysis
+    num_note = check_analysis(analysis, fp, replication)
+    if num_note:
+        notes += "\n\n" + num_note
+
     # --- single-neuron guardrails: cap confidence + ensure the standard
     #     single-cell limits are present regardless of what the model wrote. --- #
     if fp.is_neuron:
@@ -371,6 +378,13 @@ def synthesize_hierarchy(
     if stripped:
         notes += (f"\n\n[auto] Removed {len(stripped)} cited id(s) absent from the "
                   f"evidence: {', '.join(sorted(stripped))}.")
+
+    # deterministic connectivity-number guard across all levels
+    from .numverify import check_hierarchy
+    num_note = check_hierarchy(analysis, context, replication)
+    if num_note:
+        notes += "\n\n" + num_note
+
     caveats = [
         "Synapse sign, effective strength, and neuromodulation are unknown from "
         "connectivity; weights vary across individuals.",
