@@ -124,6 +124,14 @@ class FunctionalRole(BaseModel):
     confidence: Confidence
 
 
+class ProposedExperiment(BaseModel):
+    """A concrete falsification experiment for a (non-speculative) hypothesis."""
+
+    hypothesis_ref: str  # e.g. "H1" — references the statement it would test
+    method: str  # optogenetics / calcium imaging / behavioural assay / ...
+    expected_result: str
+
+
 class HypothesisAnalysis(BaseModel):
     """The part the LLM produces. Fingerprint + literature are attached by us."""
 
