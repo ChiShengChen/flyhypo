@@ -91,12 +91,19 @@ def replicate(
     use_cache: bool = True,
 ) -> ReplicationReport:
     others = others or [d for d in DEFAULT_OTHERS if d != base_dataset]
+    # Auto-include FlyWire (FAFB) when its static export is configured.
+    from . import flywire
+    if flywire.flywire_available() and "flywire" not in others and base_dataset != "flywire":
+        others = others + ["flywire"]
     datasets = [base_dataset] + others
 
     summaries: list[DatasetSummary] = []
     fps: dict[str, StructuralFingerprint] = {}
     for ds in datasets:
-        fp = connectome.build_fingerprint(cell_type, ds, top_k, use_cache=use_cache)
+        if ds == "flywire":
+            fp = flywire.flywire_fingerprint(cell_type, top_k)
+        else:
+            fp = connectome.build_fingerprint(cell_type, ds, top_k, use_cache=use_cache)
         fps[ds] = fp
         summaries.append(_summary(fp))
 

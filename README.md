@@ -239,9 +239,12 @@ unknown types.
 - [x] Cross-dataset replication — **done for neuPrint-hosted datasets** (`--replicate`
   compares the motif across hemibrain / male-cns / banc). Adding **FlyWire** as a
   replication target is the remaining piece (see below).
-- [ ] FlyWire / Codex local DB. *(The later path is FlyWire/Codex static CSV + CAVE —
-  **we do not scrape Codex**. neuPrint-based cross-dataset replication already works;
-  a FlyWire adapter would add FAFB ♀ as another replication dataset.)*
+- [x] FlyWire / Codex — **adapter built** (`flywire.py`): reads the official static
+  Codex export (`classification.csv` + `connections.csv`) and, when
+  `FLYWIRE_DATA_DIR` is set, auto-joins `--replicate` as a 4th dataset (FAFB ♀),
+  matched by `hemibrain_type`. **We do not scrape Codex.** Parser is fixture-tested;
+  needs you to download the export to run against real data. CAVE live-query is the
+  remaining option.
 - [ ] Virtual Fly Brain integration.
 - [x] Web UI — a minimal local one ships (`flyhypo-web`); a hosted/multi-user version is still out of scope.
 - [x] Evaluation harness — a coarse **gold-set scorer** ships (`flyhypo-eval`):
