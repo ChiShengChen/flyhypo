@@ -93,6 +93,10 @@ uv run flyhypo --neuron 387364605 --hierarchy
 # Cross-dataset replication — does the motif hold in another connectome?
 uv run flyhypo EPG --replicate                       # vs male-cns + banc (default)
 uv run flyhypo EPG --replicate male-cns:v1.0,banc:v888
+
+# Evaluation — grade produced roles against the gold set (run the types first):
+uv run flyhypo-eval               # all gold types with an outputs/ file
+uv run flyhypo-eval EPG MBON01
 ```
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
@@ -226,7 +230,11 @@ unknown types.
   a FlyWire adapter would add FAFB ♀ as another replication dataset.)*
 - [ ] Virtual Fly Brain integration.
 - [x] Web UI — a minimal local one ships (`flyhypo-web`); a hosted/multi-user version is still out of scope.
-- [ ] Batch / evaluation harness.
+- [x] Evaluation harness — a coarse **gold-set scorer** ships (`flyhypo-eval`):
+  grades produced functional roles against curated known biology
+  (`eval/gold/*.json`) → per-type recall / precision / partner-coverage / citation
+  validity. A regression signal, not expert review. Batch generation over many
+  types is still open.
 
 ## Guardrails honoured
 

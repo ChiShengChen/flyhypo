@@ -1,0 +1,14 @@
+{
+  "type": "EPG",
+  "source": "Central-complex compass literature (Seelig & Jayaraman; Turner-Evans; Hulse et al. hemibrain CX; Westeinde/Lu allocentric→egocentric).",
+  "known_functions": [
+    {"name": "Heading-direction encoding (ring attractor / compass)",
+     "keywords": ["heading", "compass", "attractor", "bump", "orient", "allocentric"]},
+    {"name": "Anchoring the internal compass to visual landmarks",
+     "keywords": ["visual", "landmark", "cue", "anchor", "ring neuron"]},
+    {"name": "Relaying heading to steering/navigation output",
+     "keywords": ["steer", "navigat", "goal", "pfl", "pfn", "turn", "motor", "locomot", "downstream"]}
+  ],
+  "key_partners": ["ER", "PEN", "PEG", "Delta7", "EL"],
+  "refs": ["10.1038/s41586-023-07006-3", "10.1038/s41586-024-07967-z"]
+}
