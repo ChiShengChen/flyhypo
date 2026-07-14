@@ -2,11 +2,57 @@
   "type": "MBON01",
   "source": "Mushroom-body output-neuron literature (Aso et al. 2014 MBON atlas; Owald & Waddell valence/memory).",
   "known_functions": [
-    {"name": "Mushroom-body output conveying learned valence",
-     "keywords": ["valenc", "memor", "appetit", "aversiv", "learn", "conditioned", "reward", "punish", "mbon", "output"]},
-    {"name": "Biasing approach/avoidance behaviour",
-     "keywords": ["approach", "avoid", "behavi", "steering", "drive", "attract", "repuls", "locomot"]}
+    {
+      "name": "Mushroom-body output conveying learned valence",
+      "keywords": [
+        "valenc",
+        "memor",
+        "appetit",
+        "aversiv",
+        "learn",
+        "conditioned",
+        "reward",
+        "punish",
+        "mbon",
+        "output"
+      ]
+    },
+    {
+      "name": "Biasing approach/avoidance behaviour",
+      "keywords": [
+        "approach",
+        "avoid",
+        "behavi",
+        "steering",
+        "drive",
+        "attract",
+        "repuls",
+        "locomot"
+      ]
+    },
+    {
+      "name": "Modulated by dopaminergic reinforcement (memory plasticity)",
+      "keywords": [
+        "dopamin",
+        "reinforcement",
+        "plasticity",
+        "dan",
+        "teaching",
+        "modulat",
+        "reward",
+        "punish"
+      ]
+    }
   ],
-  "key_partners": ["KC", "Kenyon", "DAN", "PAM", "PPL", "APL", "MBON"],
-  "refs": []
+  "key_partners": [
+    "KC",
+    "Kenyon",
+    "DAN",
+    "PAM",
+    "PPL",
+    "APL",
+    "MBON"
+  ],
+  "refs": [],
+  "expected_nt": "glutamate"
 }

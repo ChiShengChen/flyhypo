@@ -134,10 +134,12 @@ def fetch_predicted_nt(cell_type: str, dataset: str) -> str | None:
             NeuronCriteria(type=cell_type, regex=False, client=client),
             omit_rois=True, client=client,
         )
-        series = _safe_col(neurons, "predictedNt", "consensusNt", "celltypePredictedNt")
+        # Prefer consensusNt (curated) over predictedNt (raw per-synapse ML, which
+        # can be wrong for whole classes — e.g. Kenyon cells mis-predicted dopamine).
+        series = _safe_col(neurons, "consensusNt", "predictedNt", "celltypePredictedNt")
         if series is None and "hemibrainType" in neurons.columns:
             hits = neurons[neurons["hemibrainType"] == cell_type]
-            series = _safe_col(hits, "predictedNt", "consensusNt")
+            series = _safe_col(hits, "consensusNt", "predictedNt")
         nt = None
         if series is not None:
             vals = [x for x in series.tolist() if isinstance(x, str) and x]
@@ -288,7 +290,7 @@ def build_neuron_fingerprint(
     """
     cache_key = f"{dataset}|neuron:{body_id}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v3", cache_key)
+        cached = cache.get("fingerprint_v4", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -304,7 +306,7 @@ def build_neuron_fingerprint(
             notes=f"No neuron with bodyId {body_id} found in {dataset}.",
         )
         if use_cache:
-            cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     row = neurons.iloc[0]
@@ -362,7 +364,7 @@ def build_neuron_fingerprint(
         ),
     )
     if use_cache:
-        cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
     return fp
 
 
@@ -375,7 +377,7 @@ def build_fingerprint(
 ) -> StructuralFingerprint:
     cache_key = f"{dataset}|{cell_type}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v3", cache_key)
+        cached = cache.get("fingerprint_v4", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -422,7 +424,7 @@ def build_fingerprint(
             ),
         )
         if use_cache:
-            cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     # --- resolved instances --------------------------------------------- #
@@ -487,5 +489,5 @@ def build_fingerprint(
         notes=f"Resolved {len(resolved)} cell(s) of type '{cell_type}'." + nt_note,
     )
     if use_cache:
-        cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
     return fp

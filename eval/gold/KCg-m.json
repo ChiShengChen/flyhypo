@@ -1,0 +1,44 @@
+{
+  "type": "KCg-m",
+  "source": "Mushroom-body Kenyon-cell literature (Aso et al. 2014; Turner et al. sparse coding; Modi/Turner/Jayaraman review).",
+  "known_functions": [
+    {
+      "name": "Sparse combinatorial representation of odour identity",
+      "keywords": [
+        "odor",
+        "odour",
+        "olfactory",
+        "sparse",
+        "combinatorial",
+        "coding",
+        "representation",
+        "identity",
+        "projection neuron",
+        "calyx"
+      ]
+    },
+    {
+      "name": "Substrate for associative memory via KC→MBON plasticity",
+      "keywords": [
+        "memor",
+        "learn",
+        "associative",
+        "plasticity",
+        "conditioned",
+        "mbon",
+        "valence"
+      ]
+    }
+  ],
+  "key_partners": [
+    "PN",
+    "MBON",
+    "APL",
+    "DPM",
+    "PAM",
+    "PPL",
+    "KC"
+  ],
+  "refs": [],
+  "expected_nt": "acetylcholine"
+}

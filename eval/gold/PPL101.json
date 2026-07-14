@@ -1,0 +1,41 @@
+{
+  "type": "PPL101",
+  "source": "PPL1 dopaminergic-neuron literature (Aso et al. 2014; Cohn/Berry aversive teaching signals to the mushroom body).",
+  "known_functions": [
+    {
+      "name": "Dopaminergic reinforcement / teaching signal to the mushroom body",
+      "keywords": [
+        "dopamin",
+        "reinforcement",
+        "teaching",
+        "aversiv",
+        "punish",
+        "reward",
+        "valence",
+        "memor",
+        "modulat"
+      ]
+    },
+    {
+      "name": "Writes plasticity onto KC→MBON synapses in its MB compartment",
+      "keywords": [
+        "plasticity",
+        "kenyon",
+        "mbon",
+        "compartment",
+        "mushroom body",
+        "learn",
+        "depression"
+      ]
+    }
+  ],
+  "key_partners": [
+    "MBON",
+    "KC",
+    "Kenyon",
+    "DPM",
+    "MB"
+  ],
+  "refs": [],
+  "expected_nt": "dopamine"
+}

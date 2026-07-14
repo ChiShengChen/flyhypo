@@ -62,12 +62,18 @@ def score_type(gold: dict, report: dict) -> dict:
                {rf for h in hyps for rf in h.get("supporting_literature", [])}
     cites_ok = all(rf and rf != "n/a" for rf in all_refs)
 
+    # NT check (catches wrong-field / mis-attributed predictions the keyword
+    # scoring can't): compare the fingerprint's predicted NT to the gold value.
+    exp_nt = (gold.get("expected_nt") or "").lower()
+    got_nt = (fp.get("predicted_nt") or "").lower()
+    nt_ok = None if not exp_nt else (got_nt == exp_nt)
+
     return {
         "type": gold["type"], "recall": recall, "precision": precision,
         "n_gold": len(gold_funcs), "n_matched": len(matched), "n_roles": len(roles),
         "partner_cov": partner_cov,
         "missing": [g["name"] for g in gold_funcs if g not in matched],
-        "cites_ok": cites_ok,
+        "cites_ok": cites_ok, "nt_ok": nt_ok, "got_nt": got_nt or "?", "exp_nt": exp_nt,
     }
 
 
@@ -95,11 +101,14 @@ def main(argv: list[str] | None = None) -> int:
         print("nothing scored.")
         return 1
 
-    print(f"\n{'type':<10} {'recall':>7} {'prec':>6} {'partners':>9} {'cites':>6}  missing")
-    print("-" * 72)
+    def _nt(r):
+        return "—" if r["nt_ok"] is None else ("ok" if r["nt_ok"] else f"BAD:{r['got_nt']}")
+
+    print(f"\n{'type':<10} {'recall':>7} {'prec':>6} {'partners':>9} {'cites':>6} {'nt':>10}  missing")
+    print("-" * 84)
     for r in rows:
         print(f"{r['type']:<10} {r['recall']:>7.2f} {r['precision']:>6.2f} "
-              f"{r['partner_cov']:>9.2f} {'ok' if r['cites_ok'] else 'BAD':>6}  "
+              f"{r['partner_cov']:>9.2f} {'ok' if r['cites_ok'] else 'BAD':>6} {_nt(r):>10}  "
               f"{'; '.join(r['missing']) or '—'}")
     n = len(rows)
     print("-" * 72)

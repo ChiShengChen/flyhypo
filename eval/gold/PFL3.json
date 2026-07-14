@@ -1,0 +1,42 @@
+{
+  "type": "PFL3",
+  "source": "Central-complex steering literature (Hulse et al. hemibrain CX; Westeinde et al. 2024; Mussells Pires et al. 2024).",
+  "known_functions": [
+    {
+      "name": "Computes a goal-directed steering command (heading vs goal → turning)",
+      "keywords": [
+        "steer",
+        "turn",
+        "goal",
+        "navigat",
+        "motor",
+        "descending",
+        "egocentric",
+        "command"
+      ]
+    },
+    {
+      "name": "Reads the central-complex heading representation",
+      "keywords": [
+        "heading",
+        "compass",
+        "central complex",
+        "fan-shaped",
+        "orient",
+        "pfn",
+        "phase"
+      ]
+    }
+  ],
+  "key_partners": [
+    "PFN",
+    "hDelta",
+    "vDelta",
+    "FB",
+    "LAL",
+    "DN",
+    "FC"
+  ],
+  "refs": [],
+  "expected_nt": "acetylcholine"
+}
