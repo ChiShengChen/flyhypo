@@ -1,0 +1,13 @@
+{
+  "type": "PEN_a(PEN1)",
+  "source": "Central-complex compass literature (Green et al.; Turner-Evans et al. angular-velocity integration; Hulse et al. hemibrain CX).",
+  "known_functions": [
+    {"name": "Updates the heading estimate by angular velocity (self-motion)",
+     "keywords": ["angular velocity", "self-motion", "rotation", "shift", "bump", "heading", "compass", "integrat"]},
+    {"name": "Closes the EPG–PEN ring-attractor loop",
+     "keywords": ["ring attractor", "recurrent", "epg", "loop", "protocerebral bridge", "ellipsoid"]}
+  ],
+  "key_partners": ["EPG", "Delta7", "PEN", "PEG", "EL"],
+  "refs": [],
+  "expected_nt": "acetylcholine"
+}

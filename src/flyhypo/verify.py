@@ -145,9 +145,10 @@ def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
         strict = default_strict()
     lit_by_id = {h.id: h for h in lit}
     dropped: list[str] = []
+    salvaged: list[str] = []
     verdicts: list[dict] = []
 
-    def _process(items, label, claim_of, refs_of, set_refs, set_conf, etype_of):
+    def _process(items, label, claim_of, refs_of, set_refs, set_conf, etype_of, conn_of):
         keep = []
         for j, it in enumerate(items, 1):
             v = verify_claim(claim_text=claim_of(it), quote=getattr(it, "quote", "") or "",
@@ -157,7 +158,18 @@ def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
             verdicts.append({"kind": label, "index": j, **{k: v[k] for k in
                              ("drop", "quote_ok", "subject_named", "faithful", "reasons")}})
             if v["drop"]:
-                dropped.append(f"{label}{j} ({'; '.join(v['reasons']) or 'unverified'})")
+                # A claim with its own CONNECTIVITY grounding is never fully dropped for
+                # a literature miss — strip the unverified literature support and keep it
+                # on the fingerprint numbers (which numverify checks) at low confidence.
+                if conn_of(it):
+                    set_refs(it, [])
+                    if hasattr(it, "quote"):
+                        it.quote = ""
+                    set_conf(it, "low")
+                    salvaged.append(f"{label}{j}")
+                    keep.append(it)
+                else:
+                    dropped.append(f"{label}{j} ({'; '.join(v['reasons']) or 'unverified'})")
                 continue
             set_refs(it, [i for i in refs_of(it) if i not in v["bad_ids"]])   # strip bad cites
             set_conf(it, v["confidence"])                                     # deterministic tier
@@ -167,18 +179,22 @@ def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
     analysis.functional_roles = _process(
         analysis.functional_roles, "role", lambda r: r.function, lambda r: r.references,
         lambda r, x: setattr(r, "references", x), lambda r, c: setattr(r, "confidence", c),
-        lambda r: getattr(r, "evidence_type", "literature"))
+        lambda r: getattr(r, "evidence_type", "literature"), lambda r: r.connectivity_basis)
     # A hypothesis with no cited literature is a CONNECTIVITY claim (grounded in the
     # fingerprint numbers, checked by numverify) — not a literature claim to drop for
     # lacking a quote. Infer evidence_type from whether it cites any paper.
     analysis.hypotheses = _process(
         analysis.hypotheses, "H", lambda h: h.statement, lambda h: h.supporting_literature,
         lambda h, x: setattr(h, "supporting_literature", x), lambda h, c: setattr(h, "confidence", c),
-        lambda h: "literature" if h.supporting_literature else "connectivity")
+        lambda h: "literature" if h.supporting_literature else "connectivity",
+        lambda h: h.supporting_structure)
 
     notes = ("[verify] paper-evidence: verbatim + numbers-in-context + mis-attribution + "
              f"{'cross-family judge + ' if judge is not None else ''}citation/retraction + "
              "abstract-only grading.")
     if dropped:
         notes += f"\n[verify] dropped {len(dropped)} unverified claim(s): " + "; ".join(dropped)
-    return {"notes": notes, "dropped": dropped, "verdicts": verdicts}
+    if salvaged:
+        notes += (f"\n[verify] {len(salvaged)} claim(s) kept on connectivity grounding "
+                  f"(unverified literature support stripped): " + "; ".join(salvaged))
+    return {"notes": notes, "dropped": dropped, "salvaged": salvaged, "verdicts": verdicts}

@@ -162,7 +162,9 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > dataset-specific ones. A motif that recurs across specimens is stronger
 > structural evidence; absolute weights still vary across individuals. (E.g.
 > `EPG`'s compass partners — ER*, PEN, Delta7, EL, PEG — replicate across
-> hemibrain ♀, male-cns ♂, and banc.)
+> hemibrain ♀, male-cns ♂, and banc.) In the **web UI** (Replicate mode) each
+> dataset is a column; FlyWire (FAFB) joins automatically when `FLYWIRE_DATA_DIR`
+> is set.
 
 ### Web UI
 
@@ -247,11 +249,12 @@ unknown types.
   remaining option.
 - [ ] Virtual Fly Brain integration.
 - [x] Web UI — a minimal local one ships (`flyhypo-web`); a hosted/multi-user version is still out of scope.
-- [x] Evaluation harness — a coarse **gold-set scorer** ships (`flyhypo-eval`):
-  grades produced functional roles against curated known biology
-  (`eval/gold/*.json`) → per-type recall / precision / partner-coverage / citation
-  validity. A regression signal, not expert review. Batch generation over many
-  types is still open.
+- [x] Evaluation harness — a coarse **gold-set scorer** ships (`flyhypo-eval`) over
+  **9 types across 5 systems** (compass, ring/tangential, MB Kenyon/output/DAN/APL,
+  CX steering, olfactory PN): per-type recall / precision / partner-coverage /
+  citation-validity / **NT** vs curated known biology (`eval/gold/*.json`).
+  `flyhypo-batch` generates them. Current mean recall 1.00 / precision 0.94. A
+  regression signal, not expert review.
 
 ## Guardrails honoured
 

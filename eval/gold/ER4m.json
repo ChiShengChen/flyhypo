@@ -1,0 +1,13 @@
+{
+  "type": "ER4m",
+  "source": "Ring-neuron literature (Omoto et al.; Fisher et al.; Kim et al. visual landmark input to the compass).",
+  "known_functions": [
+    {"name": "Conveys visual landmark cues into the ellipsoid-body compass",
+     "keywords": ["visual", "landmark", "cue", "ring neuron", "bulb", "anchor", "ellipsoid", "orient"]},
+    {"name": "Provides GABAergic inhibition onto compass (EPG) neurons",
+     "keywords": ["inhibit", "gaba", "ring", "epg", "shift"]}
+  ],
+  "key_partners": ["EPG", "ER", "TuBu", "ExR"],
+  "refs": [],
+  "expected_nt": "gaba"
+}

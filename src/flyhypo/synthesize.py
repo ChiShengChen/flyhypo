@@ -82,7 +82,11 @@ paper ids that support it in references, AND/OR the specific connectivity number
 in connectivity_basis (e.g. "receives 14903 synapses from ER4m"), and a \
 confidence. Every role MUST have at least one reference or one connectivity_basis \
 entry — never list a function you cannot ground. Order roles most- to \
-least-supported.
+least-supported. For COVERAGE, consider the cell across the circuit: its role as \
+an INPUT stage (what it receives and from where), its intrinsic COMPUTATION, and \
+its OUTPUT / relay to downstream partners — include an output/relay role whenever \
+the downstream connectivity supports one (e.g. a compass neuron relaying heading \
+to steering neurons it synapses onto).
 
 8. For any role or hypothesis backed by literature, set `quote` to a VERBATIM span \
 copied CHARACTER-FOR-CHARACTER from the cited paper's abstract snippet (<= ~300 chars, \
