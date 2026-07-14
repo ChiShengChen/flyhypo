@@ -115,6 +115,53 @@ def types_in_roi(client: Client, roi: str, limit: int = 8) -> list[str]:
     return [d["type"] for d in region_dominant_types(client, roi, limit)]
 
 
+NT_DONOR_DATASET = os.environ.get("FLYHYPO_NT_DONOR", "male-cns:v1.0")
+
+
+def fetch_predicted_nt(cell_type: str, dataset: str) -> str | None:
+    """Consensus predicted neurotransmitter for a type in `dataset`, or None.
+
+    Used to borrow an NT prediction for datasets that don't store one (hemibrain).
+    Cached on disk. Matches by type, falling back to hemibrainType so a hemibrain
+    query resolves against the donor's mapping field."""
+    key = f"{dataset}|{cell_type}"
+    cached = cache.get("nt", key)
+    if cached is not None:
+        return cached or None
+    try:
+        client = get_client(dataset)
+        neurons = fetch_neurons(
+            NeuronCriteria(type=cell_type, regex=False, client=client),
+            omit_rois=True, client=client,
+        )
+        series = _safe_col(neurons, "predictedNt", "consensusNt", "celltypePredictedNt")
+        if series is None and "hemibrainType" in neurons.columns:
+            hits = neurons[neurons["hemibrainType"] == cell_type]
+            series = _safe_col(hits, "predictedNt", "consensusNt")
+        nt = None
+        if series is not None:
+            vals = [x for x in series.tolist() if isinstance(x, str) and x]
+            if vals:
+                nt = Counter(vals).most_common(1)[0][0]
+    except Exception:
+        nt = None
+    cache.put("nt", key, nt or "")
+    return nt
+
+
+def enrich_nt(cell_type: str, dataset: str, predicted_nt: str | None):
+    """If the base dataset has no NT, borrow a prediction from the donor connectome.
+    Returns (predicted_nt, source, note_suffix)."""
+    if (predicted_nt is not None or not cell_type or dataset == NT_DONOR_DATASET
+            or os.environ.get("FLYHYPO_NT_ENRICH", "1") == "0"):
+        return predicted_nt, None, ""
+    donor = fetch_predicted_nt(cell_type, NT_DONOR_DATASET)
+    if donor:
+        return (donor, f"{NT_DONOR_DATASET} (predicted; {dataset} stores no NT)",
+                f" NT '{donor}' borrowed from {NT_DONOR_DATASET} (predicted, cross-dataset).")
+    return predicted_nt, None, ""
+
+
 def region_dominant_types(client: Client, roi: str, limit: int = 12) -> list[dict]:
     """Cell types arborizing in `roi` with their cell counts, busiest first."""
     cypher = (
@@ -241,7 +288,7 @@ def build_neuron_fingerprint(
     """
     cache_key = f"{dataset}|neuron:{body_id}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v2", cache_key)
+        cached = cache.get("fingerprint_v3", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -257,7 +304,7 @@ def build_neuron_fingerprint(
             notes=f"No neuron with bodyId {body_id} found in {dataset}.",
         )
         if use_cache:
-            cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     row = neurons.iloc[0]
@@ -315,7 +362,7 @@ def build_neuron_fingerprint(
         ),
     )
     if use_cache:
-        cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
     return fp
 
 
@@ -328,7 +375,7 @@ def build_fingerprint(
 ) -> StructuralFingerprint:
     cache_key = f"{dataset}|{cell_type}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v2", cache_key)
+        cached = cache.get("fingerprint_v3", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -375,7 +422,7 @@ def build_fingerprint(
             ),
         )
         if use_cache:
-            cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     # --- resolved instances --------------------------------------------- #
@@ -402,6 +449,10 @@ def build_fingerprint(
             " Neurotransmitter and class are not provided by this dataset "
             "(null ≠ unknown-from-our-query)."
         )
+    # Borrow an NT prediction from a sibling connectome if the base has none.
+    predicted_nt, predicted_nt_source, nt_enrich_note = enrich_nt(
+        cell_type, dataset, predicted_nt)
+    nt_note += nt_enrich_note
 
     # --- ROIs (primary only) -------------------------------------------- #
     from neuprint import fetch_primary_rois
@@ -427,6 +478,7 @@ def build_fingerprint(
         dataset=dataset,
         resolved=resolved,
         predicted_nt=predicted_nt,
+        predicted_nt_source=predicted_nt_source,
         input_rois=input_rois,
         output_rois=output_rois,
         upstream=upstream,
@@ -435,5 +487,5 @@ def build_fingerprint(
         notes=f"Resolved {len(resolved)} cell(s) of type '{cell_type}'." + nt_note,
     )
     if use_cache:
-        cache.put("fingerprint_v2", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v3", cache_key, fp.model_dump(by_alias=True))
     return fp

@@ -46,6 +46,9 @@ class StructuralFingerprint(BaseModel):
     dataset: str
     resolved: list[ResolvedInstance] = Field(default_factory=list)
     predicted_nt: str | None = None
+    # If the base dataset has no NT (e.g. hemibrain) we may borrow a prediction
+    # from a sibling connectome; this names where predicted_nt came from.
+    predicted_nt_source: str | None = None
     input_rois: list[RoiWeight] = Field(default_factory=list)
     output_rois: list[RoiWeight] = Field(default_factory=list)
     upstream: list[Partner] = Field(default_factory=list)

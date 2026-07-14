@@ -94,10 +94,24 @@ uv run flyhypo --neuron 387364605 --hierarchy
 uv run flyhypo EPG --replicate                       # vs male-cns + banc (default)
 uv run flyhypo EPG --replicate male-cns:v1.0,banc:v888
 
-# Evaluation — grade produced roles against the gold set (run the types first):
+# Batch-generate many types, then grade them against the gold set:
+uv run flyhypo-batch EPG MBON01   # (or no args → every eval/gold type)
 uv run flyhypo-eval               # all gold types with an outputs/ file
 uv run flyhypo-eval EPG MBON01
 ```
+
+> **Predicted NT is borrowed from a sibling connectome.** hemibrain stores no
+> neurotransmitter, so when it's missing flyhypo borrows a *prediction* from
+> `male-cns:v1.0` (matched by `hemibrainType`) and labels it as such in
+> `predicted_nt_source` — e.g. EPG → *acetylcholine*, MBON01 → *glutamate*. Still a
+> prediction, cross-dataset; disable with `FLYHYPO_NT_ENRICH=0`.
+
+> **Verification strictness is tunable** (`FLYHYPO_VERIFY_STRICT=0` → lenient). The
+> literature gate drops claims whose verbatim quote can't be re-grepped from the
+> cited abstract; lenient keeps them but tiers their confidence down. Connectivity
+> claims are grounded by the deterministic number guard instead. Grading the gold
+> set (`flyhypo-eval`) is how these knobs get tuned — doing so surfaced that
+> connectivity-only hypotheses were being mis-dropped, lifting recall 0.58 → 1.00.
 
 Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 

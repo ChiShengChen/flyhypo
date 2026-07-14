@@ -20,6 +20,7 @@ Requires `paper-evidence` (https://github.com/ChiShengChen/paper-evidence).
 """
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -28,6 +29,14 @@ from paper_evidence import citation, evidence_state, quote_gate
 from .schema import Confidence, HypothesisAnalysis, LiteratureHit
 
 _ARXIV = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
+
+
+def default_strict() -> bool:
+    """Strictness of the literature gate (tunable via harness). FLYHYPO_VERIFY_STRICT=0
+    → lenient: soft failures (quote not found / focus not named) DOWNGRADE the claim
+    (the deterministic grade tiers it down) instead of dropping it; only an explicit
+    cross-family judge rejection, or a claim with no grounding at all, is dropped."""
+    return os.environ.get("FLYHYPO_VERIFY_STRICT", "1") != "0"
 # evidence_state tier -> flyhypo Confidence (abstract-only caps at 'medium')
 _TIER = {"High": "high", "Med": "medium", "Low": "low", "Unknown": "speculative"}
 
@@ -54,7 +63,7 @@ def _cite_args(cite_id: str, title: str | None) -> dict[str, Any]:
 def verify_claim(*, claim_text: str, quote: str, references: list[str],
                  evidence_type: str, subject_names: list[str],
                  lit_by_id: dict[str, LiteratureHit], judge: Any = None,
-                 check_citations: bool = True) -> dict[str, Any]:
+                 check_citations: bool = True, strict: bool = True) -> dict[str, Any]:
     """Verify one literature-grounded claim. Returns a verdict dict (does not mutate)."""
     reasons: list[str] = []
     src = " ".join((lit_by_id[i].snippet or "") for i in references if i in lit_by_id)
@@ -102,9 +111,13 @@ def verify_claim(*, claim_text: str, quote: str, references: list[str],
         state = {"state": "Supported", "confidence": "Med", "overclaim_risk": False,
                  "reasons": ["connectivity-grounded (not literature-verified here)"]}
 
-    # drop literature claims whose quote is missing / fabricated / mis-attributed / unsupported
-    drop = is_lit and (verbatim_ok is False or subject_named is False or faithful is False
-                       or (quote == "" and not references))
+    # A literature claim can fail softly (quote not found in the abstract, or focus
+    # cell not named) or hard (judge says unsupported, or no grounding at all).
+    soft_fail = is_lit and (verbatim_ok is False or subject_named is False)
+    hard_fail = (faithful is False) or (is_lit and quote == "" and not references)
+    # strict: any failure drops. lenient: only hard failures drop; soft failures are
+    # kept but the deterministic grade has already tiered their confidence down.
+    drop = hard_fail or (strict and soft_fail)
     return {"drop": drop, "quote_ok": verbatim_ok, "subject_named": subject_named,
             "faithful": faithful, "citations": citations, "bad_ids": bad_ids,
             "evidence_state": state, "confidence": _TIER.get(state["confidence"], "speculative"),
@@ -112,31 +125,35 @@ def verify_claim(*, claim_text: str, quote: str, references: list[str],
 
 
 def verify_roles(roles: list, lit: list[LiteratureHit], subject_names: list[str], *,
-                 judge: Any = None, check_citations: bool = True) -> tuple[list, list[str]]:
+                 judge: Any = None, check_citations: bool = True,
+                 strict: bool | None = None) -> tuple[list, list[str]]:
     """Verify a plain list of FunctionalRole in place (drop unverified, strip bad cites,
     re-tier confidence). Returns (kept_roles, dropped_labels). Used by the hierarchy path."""
     from types import SimpleNamespace
     holder = SimpleNamespace(functional_roles=list(roles), hypotheses=[])
-    res = verify_analysis(holder, lit, subject_names, judge=judge, check_citations=check_citations)
+    res = verify_analysis(holder, lit, subject_names, judge=judge,
+                          check_citations=check_citations, strict=strict)
     return holder.functional_roles, res["dropped"]
 
 
 def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
                     subject_names: list[str], *, judge: Any = None,
-                    check_citations: bool = True) -> dict[str, Any]:
+                    check_citations: bool = True, strict: bool | None = None) -> dict[str, Any]:
     """Verify every role + hypothesis IN PLACE: drop fabricated/mis-attributed claims, strip
     bad citations, and re-tier confidence from the deterministic grade. Returns a summary."""
+    if strict is None:
+        strict = default_strict()
     lit_by_id = {h.id: h for h in lit}
     dropped: list[str] = []
     verdicts: list[dict] = []
 
-    def _process(items, label, claim_of, refs_of, set_refs, set_conf):
+    def _process(items, label, claim_of, refs_of, set_refs, set_conf, etype_of):
         keep = []
         for j, it in enumerate(items, 1):
             v = verify_claim(claim_text=claim_of(it), quote=getattr(it, "quote", "") or "",
-                             references=refs_of(it), evidence_type=getattr(it, "evidence_type", "literature"),
+                             references=refs_of(it), evidence_type=etype_of(it),
                              subject_names=subject_names, lit_by_id=lit_by_id, judge=judge,
-                             check_citations=check_citations)
+                             check_citations=check_citations, strict=strict)
             verdicts.append({"kind": label, "index": j, **{k: v[k] for k in
                              ("drop", "quote_ok", "subject_named", "faithful", "reasons")}})
             if v["drop"]:
@@ -149,10 +166,15 @@ def verify_analysis(analysis: HypothesisAnalysis, lit: list[LiteratureHit],
 
     analysis.functional_roles = _process(
         analysis.functional_roles, "role", lambda r: r.function, lambda r: r.references,
-        lambda r, x: setattr(r, "references", x), lambda r, c: setattr(r, "confidence", c))
+        lambda r, x: setattr(r, "references", x), lambda r, c: setattr(r, "confidence", c),
+        lambda r: getattr(r, "evidence_type", "literature"))
+    # A hypothesis with no cited literature is a CONNECTIVITY claim (grounded in the
+    # fingerprint numbers, checked by numverify) — not a literature claim to drop for
+    # lacking a quote. Infer evidence_type from whether it cites any paper.
     analysis.hypotheses = _process(
         analysis.hypotheses, "H", lambda h: h.statement, lambda h: h.supporting_literature,
-        lambda h, x: setattr(h, "supporting_literature", x), lambda h, c: setattr(h, "confidence", c))
+        lambda h, x: setattr(h, "supporting_literature", x), lambda h, c: setattr(h, "confidence", c),
+        lambda h: "literature" if h.supporting_literature else "connectivity")
 
     notes = ("[verify] paper-evidence: verbatim + numbers-in-context + mis-attribution + "
              f"{'cross-family judge + ' if judge is not None else ''}citation/retraction + "

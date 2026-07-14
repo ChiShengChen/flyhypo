@@ -195,6 +195,7 @@ def _generate(client: genai.Client, system: str, prompt: str, schema):
             system_instruction=system,
             response_mime_type="application/json",
             response_schema=schema,
+            temperature=0.0,  # reproducible structured output (eval/tuning)
             thinking_config=types.ThinkingConfig(
                 include_thoughts=True, thinking_budget=-1  # -1 = dynamic
             ),
