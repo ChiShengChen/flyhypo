@@ -1,0 +1,11 @@
+{
+  "type": "SA1",
+  "negative": true,
+  "reason": "Not a valid hemibrain type — the tool must degrade gracefully: no crash, fuzzy suggestions, no structural claims, no invented citations, low/speculative confidence.",
+  "expect": {
+    "found": false,
+    "suggestions": true,
+    "max_confidence": "speculative",
+    "no_fabricated_citations": true
+  }
+}

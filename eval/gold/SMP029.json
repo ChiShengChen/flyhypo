@@ -1,0 +1,10 @@
+{
+  "type": "SMP029",
+  "negative": true,
+  "reason": "Superior-medial-protocerebrum interneuron with essentially no type-specific literature — the tool must stay low-confidence and cite nothing it can't ground (graceful degradation, present-but-unstudied).",
+  "expect": {
+    "found": true,
+    "max_confidence": "low",
+    "no_fabricated_citations": true
+  }
+}

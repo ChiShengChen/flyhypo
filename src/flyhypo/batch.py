@@ -35,8 +35,9 @@ def main(argv: list[str] | None = None) -> int:
         try:
             fp = connectome.build_fingerprint(t)
             if not fp.found:
-                print(f"  skip: not found (suggestions: {', '.join(fp.suggestions[:5])})")
-                continue
+                # Don't skip — run the degraded pipeline (graceful low-confidence
+                # output with suggestions), so negative/obscure types are evaluable.
+                print(f"  not found → degraded run (suggestions: {', '.join(fp.suggestions[:4])})")
             lit = literature.fetch_literature(fp)
             result = synthesize.synthesize(fp, lit)
             slug = _slug(t)

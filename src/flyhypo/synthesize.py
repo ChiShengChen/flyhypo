@@ -292,6 +292,22 @@ def synthesize(
     if num_note:
         notes += "\n\n" + num_note
 
+    # --- unstudied-type humility: if NOTHING could be grounded in literature for
+    #     this type, its functions are connectivity-only guesses (wiring ≠ validated
+    #     function) — cap them at 'low' so obscure types degrade honestly. --------- #
+    has_lit = (any(r.references for r in analysis.functional_roles)
+               or any(h.supporting_literature for h in analysis.hypotheses))
+    if not has_lit and (analysis.functional_roles or analysis.hypotheses):
+        capped = 0
+        for item in [*analysis.functional_roles, *analysis.hypotheses]:
+            if CONFIDENCE_RANK.get(item.confidence, 0) > CONFIDENCE_RANK["low"]:
+                item.confidence = "low"
+                capped += 1
+        if capped:
+            notes += ("\n\n[auto] No literature-grounded claim for this type "
+                      f"(effectively unstudied) — capped {capped} connectivity-only "
+                      "claim(s) at 'low'.")
+
     # --- single-neuron guardrails: cap confidence + ensure the standard
     #     single-cell limits are present regardless of what the model wrote. --- #
     if fp.is_neuron:

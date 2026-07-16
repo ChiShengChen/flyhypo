@@ -254,7 +254,12 @@ unknown types.
   CX steering, olfactory PN): per-type recall / precision / partner-coverage /
   citation-validity / **NT** vs curated known biology (`eval/gold/*.json`).
   `flyhypo-batch` generates them. Current mean recall 1.00 / precision 1.00 /
-  partner-coverage 0.95. A regression signal, not expert review.
+  partner-coverage 0.95. Plus **negative cases** (obscure `SMP029`, invalid `SA1`)
+  scored for **graceful degradation** — capped confidence, no fabricated citations,
+  not-found → suggestions. (This caught real overconfidence: connectivity-only
+  functional guesses for an unstudied type were rated `medium`; the tool now caps
+  them at `low` when nothing can be literature-grounded.) A regression signal, not
+  expert review.
 
 ## Guardrails honoured
 

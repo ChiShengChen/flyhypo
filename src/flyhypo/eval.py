@@ -32,9 +32,41 @@ def _slug(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("_") or "celltype"
 
 
+_CONF_RANK = {"speculative": 0, "low": 1, "medium": 2, "high": 3}
+
+
 def _matches(text: str, keywords: list[str], need: int = 1) -> bool:
     t = text.lower()
     return sum(1 for k in keywords if k.lower() in t) >= need
+
+
+def score_negative(gold: dict, report: dict) -> dict:
+    """For obscure / invalid types: check graceful degradation rather than recall.
+
+    Confirms the tool stays honest — capped confidence, no citations it can't
+    ground, and (for invalid types) not-found with suggestions and no structure."""
+    fp = report.get("fingerprint", {})
+    exp = gold.get("expect", {})
+    roles, hyps = report.get("functional_roles", []), report.get("hypotheses", [])
+    confs = [x.get("confidence", "speculative") for x in roles + hyps]
+
+    lit_ids = {h.get("id") for h in report.get("literature", [])}
+    cited = [c for x in roles for c in x.get("references", [])] + \
+            [c for h in hyps for c in h.get("supporting_literature", [])]
+    fabricated = [c for c in cited if c and c != "n/a" and c not in lit_ids]
+
+    checks: dict[str, bool] = {}
+    if "found" in exp:
+        checks["found"] = bool(fp.get("resolved")) == exp["found"]
+    if exp.get("suggestions"):
+        checks["suggest"] = bool(fp.get("suggestions"))
+    if exp.get("no_fabricated_citations"):
+        checks["no_fab"] = not fabricated
+    if "max_confidence" in exp:
+        cap = _CONF_RANK[exp["max_confidence"]]
+        checks["max_conf"] = all(_CONF_RANK.get(c, 0) <= cap for c in confs)
+    return {"type": gold["type"], "checks": checks, "ok": all(checks.values()),
+            "fabricated": fabricated}
 
 
 def score_type(gold: dict, report: dict) -> dict:
@@ -85,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         golds[g["type"]] = g
     wanted = argv or list(golds)
 
-    rows = []
+    rows, negs = [], []
     for t in wanted:
         gold = golds.get(t)
         if not gold:
@@ -95,26 +127,41 @@ def main(argv: list[str] | None = None) -> int:
         if not rpath.exists():
             print(f"! no outputs/{_slug(t)}.json — run `flyhypo {t}` first")
             continue
-        rows.append(score_type(gold, json.loads(rpath.read_text())))
+        report = json.loads(rpath.read_text())
+        (negs if gold.get("negative") else rows).append(
+            (score_negative if gold.get("negative") else score_type)(gold, report))
 
-    if not rows:
+    if not rows and not negs:
         print("nothing scored.")
         return 1
 
     def _nt(r):
         return "—" if r["nt_ok"] is None else ("ok" if r["nt_ok"] else f"BAD:{r['got_nt']}")
 
-    print(f"\n{'type':<10} {'recall':>7} {'prec':>6} {'partners':>9} {'cites':>6} {'nt':>10}  missing")
-    print("-" * 84)
-    for r in rows:
-        print(f"{r['type']:<10} {r['recall']:>7.2f} {r['precision']:>6.2f} "
-              f"{r['partner_cov']:>9.2f} {'ok' if r['cites_ok'] else 'BAD':>6} {_nt(r):>10}  "
-              f"{'; '.join(r['missing']) or '—'}")
-    n = len(rows)
-    print("-" * 72)
-    print(f"{'MEAN':<10} {sum(r['recall'] for r in rows)/n:>7.2f} "
-          f"{sum(r['precision'] for r in rows)/n:>6.2f} "
-          f"{sum(r['partner_cov'] for r in rows)/n:>9.2f}")
+    if rows:
+        print(f"\n{'type':<10} {'recall':>7} {'prec':>6} {'partners':>9} {'cites':>6} {'nt':>10}  missing")
+        print("-" * 84)
+        for r in rows:
+            print(f"{r['type']:<10} {r['recall']:>7.2f} {r['precision']:>6.2f} "
+                  f"{r['partner_cov']:>9.2f} {'ok' if r['cites_ok'] else 'BAD':>6} {_nt(r):>10}  "
+                  f"{'; '.join(r['missing']) or '—'}")
+        n = len(rows)
+        print("-" * 72)
+        print(f"{'MEAN':<10} {sum(r['recall'] for r in rows)/n:>7.2f} "
+              f"{sum(r['precision'] for r in rows)/n:>6.2f} "
+              f"{sum(r['partner_cov'] for r in rows)/n:>9.2f}")
+
+    if negs:
+        keys = ["found", "suggest", "no_fab", "max_conf"]
+        print(f"\ngraceful degradation (obscure / invalid types)")
+        print(f"{'type':<10} " + " ".join(f"{k:>9}" for k in keys) + f" {'OK':>6}")
+        print("-" * 60)
+        for r in negs:
+            cells = " ".join(
+                ("—" if k not in r["checks"] else ("ok" if r["checks"][k] else "FAIL")).rjust(9)
+                for k in keys)
+            print(f"{r['type']:<10} {cells} {'PASS' if r['ok'] else 'FAIL':>6}")
+
     print("\n(coarse keyword scoring — a regression signal, not expert review.)")
     return 0
 
