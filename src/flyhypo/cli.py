@@ -97,24 +97,21 @@ def render_markdown(h: Hypothesis) -> str:
     if fp.output_rois:
         rois = ", ".join(f"{r.roi} ({r.weight})" for r in fp.output_rois)
         L.append(f"- **Top output ROIs (presynaptic sites):** {rois}")
+    def _partner_line(p):
+        sign = f", {p.predicted_sign}" if p.predicted_sign else ""
+        return (f"- {p.type or '?'} — n={p.n_cells} — w={p.total_weight} — "
+                f"{p.predicted_nt or '?'}{sign} — {p.neuron_class or '?'}")
+
+    hdr = ("(type — n cells — w = pairwise synapse count — NT, "
+           "predicted-sign — class):")
     if fp.upstream:
         L.append("")
-        L.append("**Top upstream partners** "
-                 "(type — n cells — w = pairwise synapse count — NT — class):")
-        for p in fp.upstream:
-            L.append(
-                f"- {p.type or '?'} — n={p.n_cells} — w={p.total_weight} — "
-                f"{p.predicted_nt or '?'} — {p.neuron_class or '?'}"
-            )
+        L.append("**Top upstream partners** " + hdr)
+        L.extend(_partner_line(p) for p in fp.upstream)
     if fp.downstream:
         L.append("")
-        L.append("**Top downstream partners** "
-                 "(type — n cells — w = pairwise synapse count — NT — class):")
-        for p in fp.downstream:
-            L.append(
-                f"- {p.type or '?'} — n={p.n_cells} — w={p.total_weight} — "
-                f"{p.predicted_nt or '?'} — {p.neuron_class or '?'}"
-            )
+        L.append("**Top downstream partners** " + hdr)
+        L.extend(_partner_line(p) for p in fp.downstream)
     L.append("")
 
     # --- literature ----------------------------------------------------- #

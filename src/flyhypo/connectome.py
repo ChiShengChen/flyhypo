@@ -151,6 +151,72 @@ def fetch_predicted_nt(cell_type: str, dataset: str) -> str | None:
     return nt
 
 
+# NT → predicted synapse sign (a heuristic, NOT a measurement). In the fly CNS
+# glutamate is commonly inhibitory (GluClα); aminergic transmitters are modulatory
+# (sign is context-dependent).
+NT_SIGN = {
+    "acetylcholine": "excitatory",
+    "gaba": "inhibitory",
+    "glutamate": "inhibitory",
+    "histamine": "inhibitory",
+    "dopamine": "modulatory",
+    "octopamine": "modulatory",
+    "tyramine": "modulatory",
+    "serotonin": "modulatory",
+}
+
+
+def nt_to_sign(nt: str | None) -> str | None:
+    return NT_SIGN.get(nt.strip().lower()) if nt else None
+
+
+def fetch_nt_bulk(cell_types: list[str], dataset: str) -> dict[str, str | None]:
+    """Consensus NT for many types in `dataset` in ONE query (matched by type or
+    hemibrainType), cached per type. Used to sign partner edges."""
+    out: dict[str, str | None] = {}
+    need: list[str] = []
+    for t in dict.fromkeys(t for t in cell_types if t):
+        c = cache.get("nt", f"{dataset}|{t}")
+        if c is not None:
+            out[t] = c or None
+        else:
+            need.append(t)
+    if need:
+        buckets: dict[str, list[str]] = {}
+        try:
+            lst = ",".join(repr(t) for t in need)
+            df = get_client(dataset).fetch_custom(
+                f"MATCH (n:Neuron) WHERE (n.type IN [{lst}] OR n.hemibrainType IN [{lst}]) "
+                f"AND n.consensusNt IS NOT NULL "
+                f"RETURN n.type AS type, n.hemibrainType AS hbt, n.consensusNt AS nt"
+            )
+            for t, hbt, nt in zip(df["type"], df.get("hbt", []), df["nt"]):
+                for k in (t, hbt):
+                    if isinstance(k, str):
+                        buckets.setdefault(k, []).append(nt)
+        except Exception:
+            pass
+        for t in need:
+            nt = Counter(buckets[t]).most_common(1)[0][0] if buckets.get(t) else None
+            cache.put("nt", f"{dataset}|{t}", nt or "")
+            out[t] = nt
+    return out
+
+
+def enrich_partner_signs(partners: list[Partner], dataset: str) -> None:
+    """Fill each partner's predicted_nt (borrowed from the donor if absent) and the
+    predicted synapse sign derived from it. In place."""
+    enrich = os.environ.get("FLYHYPO_NT_ENRICH", "1") != "0" and dataset != NT_DONOR_DATASET
+    nt_map = {}
+    if enrich:
+        missing = [p.type for p in partners if p.predicted_nt is None and p.type]
+        nt_map = fetch_nt_bulk(missing, NT_DONOR_DATASET)
+    for p in partners:
+        if p.predicted_nt is None and p.type in nt_map:
+            p.predicted_nt = nt_map[p.type]
+        p.predicted_sign = nt_to_sign(p.predicted_nt)
+
+
 def enrich_nt(cell_type: str, dataset: str, predicted_nt: str | None):
     """If the base dataset has no NT, borrow a prediction from the donor connectome.
     Returns (predicted_nt, source, note_suffix)."""
@@ -290,7 +356,7 @@ def build_neuron_fingerprint(
     """
     cache_key = f"{dataset}|neuron:{body_id}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v4", cache_key)
+        cached = cache.get("fingerprint_v5", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -306,7 +372,7 @@ def build_neuron_fingerprint(
             notes=f"No neuron with bodyId {body_id} found in {dataset}.",
         )
         if use_cache:
-            cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v5", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     row = neurons.iloc[0]
@@ -342,6 +408,10 @@ def build_neuron_fingerprint(
         primary = set(roi_counts["roi"].unique()) if roi_counts is not None else set()
 
     crit = {"bodyId": int(body_id)}
+    up = _partners(_connections(crit, direction="upstream", client=client), "pre", top_k)
+    dn = _partners(_connections(crit, direction="downstream", client=client), "post", top_k)
+    enrich_partner_signs(up, dataset)
+    enrich_partner_signs(dn, dataset)
     fp = StructuralFingerprint(
         cell_type_query=f"bodyId:{body_id}",
         dataset=dataset,
@@ -349,8 +419,8 @@ def build_neuron_fingerprint(
         predicted_nt=predicted_nt,
         input_rois=_aggregate_rois(roi_counts, primary, "post"),
         output_rois=_aggregate_rois(roi_counts, primary, "pre"),
-        upstream=_partners(_connections(crit, direction="upstream", client=client), "pre", top_k),
-        downstream=_partners(_connections(crit, direction="downstream", client=client), "post", top_k),
+        upstream=up,
+        downstream=dn,
         neuron_bodyId=int(body_id),
         neuron_instance=instance,
         neuron_type=ntype,
@@ -364,7 +434,7 @@ def build_neuron_fingerprint(
         ),
     )
     if use_cache:
-        cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v5", cache_key, fp.model_dump(by_alias=True))
     return fp
 
 
@@ -377,7 +447,7 @@ def build_fingerprint(
 ) -> StructuralFingerprint:
     cache_key = f"{dataset}|{cell_type}|{top_k}"
     if use_cache:
-        cached = cache.get("fingerprint_v4", cache_key)
+        cached = cache.get("fingerprint_v5", cache_key)
         if cached is not None:
             return StructuralFingerprint.model_validate(cached)
 
@@ -424,7 +494,7 @@ def build_fingerprint(
             ),
         )
         if use_cache:
-            cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
+            cache.put("fingerprint_v5", cache_key, fp.model_dump(by_alias=True))
         return fp
 
     # --- resolved instances --------------------------------------------- #
@@ -474,6 +544,8 @@ def build_fingerprint(
     downstream = _partners(
         _connections(crit, direction="downstream", client=client), "post", top_k
     )
+    enrich_partner_signs(upstream, dataset)
+    enrich_partner_signs(downstream, dataset)
 
     fp = StructuralFingerprint(
         cell_type_query=cell_type,
@@ -489,5 +561,5 @@ def build_fingerprint(
         notes=f"Resolved {len(resolved)} cell(s) of type '{cell_type}'." + nt_note,
     )
     if use_cache:
-        cache.put("fingerprint_v4", cache_key, fp.model_dump(by_alias=True))
+        cache.put("fingerprint_v5", cache_key, fp.model_dump(by_alias=True))
     return fp

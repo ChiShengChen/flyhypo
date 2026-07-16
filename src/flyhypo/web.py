@@ -205,17 +205,25 @@ function roiTable(title, rois){
   s.appendChild(t); return s;
 }
 
+const SIGN_COLOR = {excitatory:"#34d399", inhibitory:"#fb7185", modulatory:"#fbbf24"};
+function signColor(sign){ return SIGN_COLOR[sign] || "#9aa3b2"; }
+const SIGN_MARK = {excitatory:"mExc", inhibitory:"mInh", modulatory:"mMod", unknown:"mUnk"};
+function signMark(sign){ return SIGN_MARK[sign] || SIGN_MARK.unknown; }
+
 function partnerTable(title, ps){
   const s = el("section"); s.appendChild(el("h2",null,title));
   if(!ps || !ps.length){ s.appendChild(el("div","muted","none")); return s; }
   const t = el("table");
-  t.innerHTML="<tr><th>type</th><th>cells (n)</th><th style='text-align:right'>synapse count</th><th>NT</th><th>class</th></tr>";
+  t.innerHTML="<tr><th>type</th><th>cells (n)</th><th style='text-align:right'>synapse count</th><th>NT</th><th>sign (pred)</th><th>class</th></tr>";
   for(const p of ps){
     const tr=el("tr");
     tr.appendChild(el("td",null,p.type||"?"));
     tr.appendChild(el("td",null,String(p.n_cells)));
     tr.appendChild(el("td","num",(p.total_weight).toLocaleString()));
     tr.appendChild(el("td","muted",p.predicted_nt||"—"));
+    const sg=el("td",null,p.predicted_sign||"—");
+    if(p.predicted_sign) sg.style.color=signColor(p.predicted_sign);
+    tr.appendChild(sg);
     tr.appendChild(el("td","muted",p["class"]||"—"));
     t.appendChild(tr);
   }
@@ -477,46 +485,50 @@ function renderGraph(fp){
   if(!up.length && !down.length) return;
   const s=el("section");
   s.appendChild(el("h2",null,"Connectivity graph (evidence for the hypotheses)"));
-  s.appendChild(el("div","muted",
-    "Arrows = synapse direction into / out of "+fp.cell_type_query+
-    "; line thickness ∝ synapse weight; numbers = pairwise synapse count; n = #cells. Showing top "+
-    up.length+" upstream / "+down.length+" downstream of "+
-    ((fp.upstream||[]).length)+" / "+((fp.downstream||[]).length)+"."));
+  const desc=el("div","muted");
+  desc.innerHTML =
+    "Arrows = synapse direction; thickness ∝ synapse weight; numbers = pairwise synapse count. "+
+    "Edge colour = predicted sign from the partner's NT — "+
+    "<span style='color:#34d399'>excitatory</span> · <span style='color:#fb7185'>inhibitory</span>"+
+    " · <span style='color:#fbbf24'>modulatory</span> · <span style='color:#9aa3b2'>unknown</span>"+
+    " (NT→sign heuristic, not measured). Top "+up.length+" up / "+down.length+" down.";
+  s.appendChild(desc);
   const rows=Math.max(up.length,down.length,1);
   const rowH=48, padTop=24, padBot=16, W=920, H=padTop+rows*rowH+padBot;
   const root=svg("svg",{viewBox:"0 0 "+W+" "+H, width:"100%",
     style:"max-width:100%;height:auto;margin-top:10px"});
   const defs=svg("defs",{});
-  for(const a of [["aUp","#b69cff"],["aDown","#7cc4ff"]]){
-    const m=svg("marker",{id:a[0],viewBox:"0 0 10 10",refX:"9",refY:"5",
+  for(const sg in SIGN_MARK){
+    const m=svg("marker",{id:SIGN_MARK[sg],viewBox:"0 0 10 10",refX:"9",refY:"5",
       markerWidth:"7",markerHeight:"7",orient:"auto-start-reverse"});
-    m.appendChild(svg("path",{d:"M0,0 L10,5 L0,10 z",fill:a[1]})); defs.appendChild(m);
+    m.appendChild(svg("path",{d:"M0,0 L10,5 L0,10 z",fill:signColor(sg==="unknown"?null:sg)}));
+    defs.appendChild(m);
   }
   root.appendChild(defs);
   const maxW=Math.max(1,...up.map(p=>p.total_weight),...down.map(p=>p.total_weight));
   const sw=w=>1.2+5.5*(w/maxW);
   const cy=H/2, cxL=380, cxR=540;
+  const tip=p=>(p.type||"?")+" — n="+p.n_cells+" — w="+p.total_weight+
+    (p.predicted_nt?(" — "+p.predicted_nt+(p.predicted_sign?(" ("+p.predicted_sign+")"):"")):"");
   up.forEach((p,i)=>{
-    const y=padTop+i*rowH, x=10, w=180, h=34, yc=y+h/2;
-    const ln=svg("line",{x1:x+w,y1:yc,x2:cxL,y2:cy,stroke:"#b69cff",
-      "stroke-width":sw(p.total_weight),"stroke-opacity":"0.7","marker-end":"url(#aUp)"});
+    const y=padTop+i*rowH, x=10, w=180, h=34, yc=y+h/2, col=signColor(p.predicted_sign);
+    const ln=svg("line",{x1:x+w,y1:yc,x2:cxL,y2:cy,stroke:col,
+      "stroke-width":sw(p.total_weight),"stroke-opacity":"0.8","marker-end":"url(#"+signMark(p.predicted_sign)+")"});
     ln.appendChild(svgTitle((p.type||"?")+" → "+fp.cell_type_query+": "+
-      p.total_weight+" synapses, "+p.n_cells+" cells")); root.appendChild(ln);
-    root.appendChild(edgeLabel(x+w+0.35*(cxL-(x+w)), yc+0.35*(cy-yc)-3,
-      p.total_weight.toLocaleString(), "#b69cff"));
-    drawNode(root,x,y,w,h,p.type,"n="+p.n_cells,"#0d0f15","#272b38",false,
-      (p.type||"?")+" — n="+p.n_cells+" — w="+p.total_weight+(p.predicted_nt?(" — "+p.predicted_nt):""));
+      p.total_weight+" synapses, "+p.n_cells+" cells"+(p.predicted_sign?(", "+p.predicted_sign):"")));
+    root.appendChild(ln);
+    root.appendChild(edgeLabel(x+w+0.35*(cxL-(x+w)), yc+0.35*(cy-yc)-3, p.total_weight.toLocaleString(), col));
+    drawNode(root,x,y,w,h,p.type,"n="+p.n_cells,"#0d0f15","#272b38",false,tip(p));
   });
   down.forEach((p,i)=>{
-    const y=padTop+i*rowH, x=W-190, w=180, h=34, yc=y+h/2;
-    const ln=svg("line",{x1:cxR,y1:cy,x2:x,y2:yc,stroke:"#7cc4ff",
-      "stroke-width":sw(p.total_weight),"stroke-opacity":"0.7","marker-end":"url(#aDown)"});
+    const y=padTop+i*rowH, x=W-190, w=180, h=34, yc=y+h/2, col=signColor(p.predicted_sign);
+    const ln=svg("line",{x1:cxR,y1:cy,x2:x,y2:yc,stroke:col,
+      "stroke-width":sw(p.total_weight),"stroke-opacity":"0.8","marker-end":"url(#"+signMark(p.predicted_sign)+")"});
     ln.appendChild(svgTitle(fp.cell_type_query+" → "+(p.type||"?")+": "+
-      p.total_weight+" synapses, "+p.n_cells+" cells")); root.appendChild(ln);
-    root.appendChild(edgeLabel(cxR+0.65*(x-cxR), cy+0.65*(yc-cy)-3,
-      p.total_weight.toLocaleString(), "#7cc4ff"));
-    drawNode(root,x,y,w,h,p.type,"n="+p.n_cells,"#0d0f15","#272b38",false,
-      (p.type||"?")+" — n="+p.n_cells+" — w="+p.total_weight+(p.predicted_nt?(" — "+p.predicted_nt):""));
+      p.total_weight+" synapses, "+p.n_cells+" cells"+(p.predicted_sign?(", "+p.predicted_sign):"")));
+    root.appendChild(ln);
+    root.appendChild(edgeLabel(cxR+0.65*(x-cxR), cy+0.65*(yc-cy)-3, p.total_weight.toLocaleString(), col));
+    drawNode(root,x,y,w,h,p.type,"n="+p.n_cells,"#0d0f15","#272b38",false,tip(p));
   });
   drawNode(root,cxL,cy-20,160,40,fp.cell_type_query,"n="+((fp.resolved||[]).length||"?"),
     "#1a2740","#7cc4ff",true,fp.cell_type_query);

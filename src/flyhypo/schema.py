@@ -37,6 +37,10 @@ class Partner(BaseModel):
     n_cells: int
     total_weight: int
     predicted_nt: str | None = None
+    # Predicted excit/inhib/modulatory from predicted_nt (a NT→sign heuristic, not
+    # measured): acetylcholine→excitatory, GABA→inhibitory, glutamate→(fly) likely
+    # inhibitory, aminergic→modulatory. None = unknown NT.
+    predicted_sign: str | None = None
     # 'class' is a Python keyword; expose it under the contract name via alias.
     neuron_class: str | None = Field(default=None, alias="class")
 

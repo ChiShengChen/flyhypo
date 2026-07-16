@@ -59,10 +59,16 @@ via supporting_literature. No ungrounded claims.
 and/or directly literature-supported.
    - low: supported only by partner/region literature, or weak/indirect structure.
    - speculative: a reasonable mechanistic guess beyond the evidence.
-3. ALWAYS populate not_supported_by_connectivity. At minimum note that synapse \
-sign, effective strength, and neuromodulation are unknown from connectivity, and \
-that weights vary across individuals — plus anything else your hypotheses assume \
-that the connectome cannot establish.
+3. Partners carry a predicted_sign (excitatory/inhibitory/modulatory) DERIVED \
+from predicted neurotransmitter — you MAY use it to reason about excitation vs \
+inhibition (e.g. "GABAergic ER4m likely INHIBITS EPG"), but it is a PREDICTION \
+(a NT→sign heuristic; glutamate is often but not always inhibitory in flies), so \
+always label such claims "predicted" and never state sign as fact.
+   ALWAYS populate not_supported_by_connectivity. At minimum note that synapse \
+sign is only PREDICTED (from NT, not measured), and that effective/intrinsic \
+strength and neuromodulation are unknown from connectivity and weights vary \
+across individuals — plus anything else your hypotheses assume that the \
+connectome cannot establish.
 4. Propose >=1 concrete falsification experiment per NON-speculative hypothesis \
 (optogenetic activation/silencing, calcium imaging, behavioural assay, \
 electrophysiology, etc.), each with an expected_result. Use hypothesis_ref like \
