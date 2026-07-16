@@ -2,12 +2,38 @@
   "type": "APL",
   "source": "Mushroom-body inhibition literature (Lin et al. sparse coding; Amin et al. gain control).",
   "known_functions": [
-    {"name": "GABAergic feedback that sparsens/normalises Kenyon-cell activity",
-     "keywords": ["inhibit", "gaba", "sparse", "normaliz", "gain", "feedback", "kenyon", "kc"]},
-    {"name": "Regulates olfactory learning and odour discrimination",
-     "keywords": ["memor", "learn", "discrimination", "odor", "odour", "olfactory"]}
+    {
+      "name": "GABAergic feedback that sparsens/normalises Kenyon-cell activity",
+      "keywords": [
+        "inhibit",
+        "gaba",
+        "sparse",
+        "normaliz",
+        "gain",
+        "feedback",
+        "kenyon",
+        "kc"
+      ]
+    },
+    {
+      "name": "Regulates olfactory learning and odour discrimination",
+      "keywords": [
+        "memor",
+        "learn",
+        "discrimination",
+        "odor",
+        "odour",
+        "olfactory"
+      ]
+    }
   ],
-  "key_partners": ["KC", "Kenyon", "MBON", "DPM", "PPL", "PAM"],
+  "key_partners": [
+    "KC",
+    "MBON",
+    "DPM",
+    "PPL",
+    "PAM"
+  ],
   "refs": [],
   "expected_nt": "gaba"
 }

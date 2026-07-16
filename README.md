@@ -253,8 +253,8 @@ unknown types.
   **9 types across 5 systems** (compass, ring/tangential, MB Kenyon/output/DAN/APL,
   CX steering, olfactory PN): per-type recall / precision / partner-coverage /
   citation-validity / **NT** vs curated known biology (`eval/gold/*.json`).
-  `flyhypo-batch` generates them. Current mean recall 1.00 / precision 0.94. A
-  regression signal, not expert review.
+  `flyhypo-batch` generates them. Current mean recall 1.00 / precision 1.00 /
+  partner-coverage 0.95. A regression signal, not expert review.
 
 ## Guardrails honoured
 

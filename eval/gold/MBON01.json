@@ -46,12 +46,10 @@
   ],
   "key_partners": [
     "KC",
-    "Kenyon",
-    "DAN",
     "PAM",
-    "PPL",
     "APL",
-    "MBON"
+    "MBON",
+    "DPM"
   ],
   "refs": [],
   "expected_nt": "glutamate"

@@ -2,12 +2,39 @@
   "type": "DA1_lPN",
   "source": "Olfactory projection-neuron literature (cVA / DA1 glomerulus; Ruta et al.; Jefferis et al. PN stereotypy).",
   "known_functions": [
-    {"name": "Relays the DA1 (cVA pheromone) olfactory channel from the antennal lobe",
-     "keywords": ["pheromone", "cva", "da1", "olfactory", "odor", "odour", "glomerulus", "antennal lobe", "projection"]},
-    {"name": "Targets the lateral horn and mushroom-body calyx",
-     "keywords": ["lateral horn", "mushroom body", "calyx", "kenyon", "innate", "projection neuron"]}
+    {
+      "name": "Relays the DA1 (cVA pheromone) olfactory channel from the antennal lobe",
+      "keywords": [
+        "pheromone",
+        "cva",
+        "da1",
+        "olfactory",
+        "odor",
+        "odour",
+        "glomerulus",
+        "antennal lobe",
+        "projection"
+      ]
+    },
+    {
+      "name": "Targets the lateral horn and mushroom-body calyx",
+      "keywords": [
+        "lateral horn",
+        "mushroom body",
+        "calyx",
+        "kenyon",
+        "innate",
+        "projection neuron"
+      ]
+    }
   ],
-  "key_partners": ["KC", "Kenyon", "DA1", "lLN", "ORN", "DM"],
+  "key_partners": [
+    "KC",
+    "DA1",
+    "lLN",
+    "ORN",
+    "LH"
+  ],
   "refs": [],
   "expected_nt": "acetylcholine"
 }
