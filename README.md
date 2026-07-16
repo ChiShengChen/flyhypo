@@ -27,29 +27,43 @@ partners, edge thickness ∝ synapse weight, with synapse counts and cell counts
 ## How it works
 
 ```
-cell type ─▶ connectome.py ─▶ StructuralFingerprint ─┐
-              (neuPrint)                              ├─▶ synthesize.py ─▶ Hypothesis
-            literature.py ─▶ [LiteratureHit] ─────────┘   (Gemini ×2:           (JSON + .md)
-              (PubMed)        (queries built from               generate, then
-                               the fingerprint)                 verify)
+                  ┌ connectome.py (neuPrint) ───────────────────────────────────┐
+ cell type / ────▶│ type · single-neuron (bodyId) · region-aware suggestions     │
+   bodyId         │ NT borrowed from male-cns · cross-dataset replication         │─┐
+                  │   (hemibrain · male-cns · banc · FlyWire via flywire.py)      │ │
+                  └──────────────────────────────────────────────────────────────┘ │─▶ StructuralFingerprint
+                  ┌ literature.py (PubMed via paper-search-mcp) ─────────────────┐ │        │
+                  │ queries from the fingerprint · saturation · snowball · semantic│─┘        ▼
+                  └──────────────────────────────────────────────────────────────┘   synthesize.py (Gemini,
+                                                                                       temp 0, reasoning)
+   functional_roles + tiered hypotheses + hierarchy (region ▸ subregion ▸ umbrella ▸ ◀──┘
+   cell type ▸ neuron)                        │
+                                              ▼
+   verify.py  — paper-evidence: verbatim-quote re-grep · mis-attribution guard ·
+                cross-family judge · citation/retraction · abstract-only grading
+   numverify.py — every cited synapse number must exist in the fingerprint
+   + connectivity-salvage · unstudied-type humility cap · single-neuron cap
+                                              │
+                                              ▼
+   Hypothesis / HierarchyReport / ReplicationReport ─▶ JSON + Markdown · web UI
+                                              └─▶ flyhypo-batch → flyhypo-eval (gold-set scorer)
 ```
 
 | Module | Responsibility |
 |---|---|
-| `schema.py` | Pydantic data contracts (`StructuralFingerprint`, `LiteratureHit`, `Hypothesis`). |
-| `connectome.py` | Pure, typed wrapper over `neuprint-python`. Resolves a type → fingerprint; fuzzy-suggests on miss. *(Designed to be liftable into a standalone MCP server.)* |
-| `literature.py` | Builds queries from the fingerprint and retrieves abstracts/metadata via `paper-search-mcp`. |
-| `synthesize.py` | Gemini (with explicit reasoning) generates tiered hypotheses; a verification pass then **downgrades** any over-stated confidence and the pipeline **strips any cited id not in the evidence**. The model's thought summary is surfaced as `reasoning_summary`. |
-| `cli.py` | `flyhypo <cell_type> …` → writes `<cell_type>.json` + `.md`, prints a summary. |
+| `schema.py` | Pydantic data contracts (fingerprint, roles, hypotheses, hierarchy, replication). |
+| `connectome.py` | Typed wrapper over `neuprint-python`: type / single-neuron fingerprint, region-aware suggestions, NT enrichment from a sibling connectome. *(Liftable into a standalone MCP server.)* |
+| `literature.py` | Builds queries from the fingerprint; PubMed via `paper-search-mcp`, with saturation-aware retrieval, citation snowball, and semantic re-ranking. |
+| `synthesize.py` | Gemini (temp 0, explicit reasoning) → functional roles + tiered hypotheses; folds cross-dataset replication in as evidence; applies the guards below. |
+| `verify.py` | Anti-hallucination via [`paper-evidence`](https://github.com/ChiShengChen/paper-evidence) (≠ Gemini): verbatim re-grep, mis-attribution guard, cross-family judge, citation/retraction, deterministic grading. |
+| `numverify.py` | Deterministic: every synapse-scale number a claim cites must exist in the fingerprint / replication. |
+| `hierarchy.py` | Resolves & analyses region ▸ subregion ▸ umbrella ▸ cell-type ▸ neuron. |
+| `replication.py` · `flywire.py` | Cross-dataset motif replication across neuPrint datasets + the FlyWire (FAFB) static export. |
+| `cli.py` · `web.py` | `flyhypo …` CLI and the local web UI. |
+| `batch.py` · `eval.py` | Batch generation and the gold-set scorer (`flyhypo-batch`, `flyhypo-eval`). |
 
-> **Grounding & verification — where this is going.** The current verify step is a single
-> *same-model* second pass. [`ARCHITECTURE.md`](ARCHITECTURE.md) lays out the target: a layered,
-> mostly-deterministic anti-hallucination stack — verbatim quote re-grep, numbers-in-context, a
-> **mis-attribution guard** (the cell type must be named in its own quote), a **cross-family judge**
-> (so it isn't Gemini grading Gemini), **citation reality + retraction checks**, and **deterministic
-> evidence grading** (abstract-only caps confidence; silence ≠ contradiction) — plus saturation +
-> snowball recall and semantic retrieval. It reuses [`paper-evidence`](https://github.com/ChiShengChen/paper-evidence)
-> as the verification library; flyhypo stays the connectome + fly-domain application.
+The verification design (and why it isn't Gemini grading Gemini) is written up in
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ---
 
@@ -165,6 +179,11 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > hemibrain ♀, male-cns ♂, and banc.) In the **web UI** (Replicate mode) each
 > dataset is a column; FlyWire (FAFB) joins automatically when `FLYWIRE_DATA_DIR`
 > is set.
+
+![flyhypo web UI — cross-dataset replication](docs/replication.png)
+
+*Replicate mode: EPG's compass partners with side-by-side synapse weights across
+hemibrain ♀, male-cns ♂, and banc; NT (acetylcholine) borrowed from male-cns.*
 
 ### Web UI
 
