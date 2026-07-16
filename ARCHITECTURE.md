@@ -1,8 +1,10 @@
-# flyhypo architecture — grounding & verification (target design)
+# flyhypo architecture — grounding & verification
 
-> Status: **design / upgrade plan**, not yet implemented. It records where flyhypo is going
-> and how the pieces slot in, so the code can catch up incrementally. Today's verification is
-> a single same-model second pass (see "Current" below); this doc is the target.
+> Status: the literature anti-hallucination stack (steps 1–5 below) is **implemented** via
+> `paper-evidence`, alongside a set of **connectivity-side guards** and an **evaluation harness**
+> added since (both documented at the end of this file). The "Current (v0)" section is kept as the
+> starting point this design replaced. This doc is both the design rationale and a record of the
+> defects the harness surfaced and how they were fixed.
 
 flyhypo's core promise is that **every claim traces to a specific paper or connectivity number,
 and nothing is fabricated**. That promise is only as strong as the *verification* behind it. This
@@ -113,3 +115,44 @@ It is the domain-neutral extraction of exactly this anti-hallucination machinery
 on real literature, including fruit-fly papers), with the verification core as **stdlib, zero-dep,
 offline**. flyhypo stays the *application* (connectome + fly domain + UI); `paper-evidence` is the
 *verification library*. See its README for the full API.
+
+## Connectivity-side guards (the structural counterpart)
+
+`paper-evidence` verifies *literature* claims. Connectivity claims — the tool's strong suit — get
+their own deterministic guards in flyhypo, because a connectome number is only trustworthy if it is
+actually in the fingerprint:
+
+- **`numverify.py` — number guard.** Every synapse-scale number a role/hypothesis cites in
+  `connectivity_basis` / `supporting_structure` must appear in the `StructuralFingerprint` (or the
+  cross-dataset replication weights); a number that is nowhere in the evidence is flagged and the
+  claim downgraded one tier. Conservative (ignores integers < 100 and citation years). This is
+  flyhypo's own guard, distinct from `paper-evidence`'s literature "numbers-in-context" check.
+- **Connectivity salvage.** A claim with its own connectivity grounding is never *dropped* for a
+  literature-quote miss — its unverified literature support is stripped and it is kept on the
+  fingerprint numbers at low confidence. A real structural claim shouldn't die because a paraphrase
+  failed.
+- **Evidence-type inference.** A hypothesis that cites no literature is a *connectivity* claim, not a
+  literature claim to drop for lacking a quote.
+- **Unstudied-type humility cap.** If *nothing* in the report could be grounded in literature, the
+  type is effectively unstudied — connectivity shows wiring, not validated function — so all claims
+  cap at `low`.
+- **Single-neuron cap.** For one bodyId, function is inherited from the type; cap at `low`.
+
+## Evaluation-driven development (what the harness caught)
+
+`flyhypo-eval` — a curated gold set over 9 well-characterised types (5 systems) plus **negative
+cases** (obscure `SMP029`, invalid `SA1`) — is not just a score; it is the mechanism that surfaced
+most of the guards above. Every fix below was **measured first, then made**:
+
+| The harness showed | Root cause | Fix |
+|---|---|---|
+| recall 0.58; hypotheses dropped | connectivity-only hypotheses treated as literature claims, dropped for lacking a quote | evidence-type inference (connectivity ≠ literature) |
+| EPG recall bounced 0.67 ↔ 1.00 | a *generation-coverage* gap — the output/relay role wasn't reliably emitted (**not** a verify drop) | prompt now covers input → computation → output |
+| KCg-m NT = dopamine (wrong) | `predictedNt` (raw per-synapse ML) mis-labels whole classes | prefer curated `consensusNt`; add an **NT check to the harness** so this error class is caught, not eyeballed |
+| precision / partner-coverage < 1.0 | over-strict **gold** (redundant `Kenyon`, class-level `DAN`, wrong keys) | calibrate the gold, not the tool |
+| SMP029 rated `medium` | connectivity-only functional guesses for an unstudied type weren't capped | unstudied-type humility cap |
+
+The discipline the project follows: **measure before you fix**, and when a low score is the *gold's*
+fault (a synonym miss, an over-strict partner key), fix the gold — never tune the tool for the score.
+Determinism helps this loop: structured generation runs at `temperature=0`, and the deterministic
+guards (numverify, citation hygiene, the caps) make re-runs comparable.
