@@ -18,9 +18,12 @@ structured JSON + a readable Markdown report.
 
 ![Connectivity graph for EPG](docs/graph.png)
 
-*Connectivity graph (from the web UI) for `EPG` — the structural evidence the
-hypotheses are grounded in: top-8 upstream partners → EPG → top-8 downstream
-partners, edge thickness ∝ synapse weight, with synapse counts and cell counts `n`.*
+*Connectivity graph (from the web UI) for `EPG`: top-8 upstream → EPG → top-8
+downstream, edge thickness ∝ synapse weight. **Edge colour = predicted synapse
+sign** from the partner's neurotransmitter — <span>excitatory</span> (green) /
+inhibitory (red) / modulatory (amber) — so the ring-attractor's excitatory
+PEN/EPG recurrence vs inhibitory ring-neuron input reads at a glance. A NT→sign
+heuristic, always labelled predicted.*
 
 ---
 
@@ -136,6 +139,14 @@ Outputs land in `outputs/<cell_type>.json` and `outputs/<cell_type>.md`.
 > Kenyon cells `KCg-m`, `KCab-c`, …; plus the 36 `MBON…` output neurons). Pass an
 > actual type instead: `KCg-m`, `MBON01`, `EPG`. Unknown/typo'd types fall back to
 > fuzzy name suggestions.
+
+> **Tip — predicted synapse sign.** A connectome gives no synapse sign, but each
+> partner now carries a **predicted sign** from its neurotransmitter (borrowed from
+> `male-cns`): ACh → excitatory, GABA / glutamate → inhibitory, aminergic →
+> modulatory. It colours the graph edges and lets hypotheses reason about
+> excitation vs inhibition — always **labelled predicted** (a NT→sign heuristic,
+> not measured; glutamate is only *usually* inhibitory in flies). Effective
+> strength and neuromodulation remain unknown.
 
 > **Tip — what the numbers mean.** ROI tables show **synaptic *site* counts**
 > (pre/post sites summed over the cells); partner `w` / "synapse count" is the
