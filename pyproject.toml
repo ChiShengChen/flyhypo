@@ -16,6 +16,7 @@ dependencies = [
     # verification layer: verbatim quote gate, mis-attribution guard, cross-family judge,
     # citation/retraction checks, evidence grading (its core is stdlib / zero-dep)
     "paper-evidence @ git+https://github.com/ChiShengChen/paper-evidence",
+    "mcp>=1.28.0",
 ]
 
 [project.scripts]
@@ -23,6 +24,7 @@ flyhypo = "flyhypo:main"
 flyhypo-web = "flyhypo.web:main"
 flyhypo-eval = "flyhypo.eval:main"
 flyhypo-batch = "flyhypo.batch:main"
+flyhypo-mcp = "flyhypo.mcp_server:main"
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]

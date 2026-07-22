@@ -62,7 +62,7 @@ heuristic, always labelled predicted.*
 | `numverify.py` | Deterministic: every synapse-scale number a claim cites must exist in the fingerprint / replication. |
 | `hierarchy.py` | Resolves & analyses region ▸ subregion ▸ umbrella ▸ cell-type ▸ neuron. |
 | `replication.py` · `flywire.py` | Cross-dataset motif replication across neuPrint datasets + the FlyWire (FAFB) static export. |
-| `cli.py` · `web.py` | `flyhypo …` CLI and the local web UI. |
+| `cli.py` · `web.py` · `mcp_server.py` | `flyhypo …` CLI, the local web UI, and an MCP server (`flyhypo-mcp`) exposing the engine as tools. |
 | `batch.py` · `eval.py` | Batch generation and the gold-set scorer (`flyhypo-batch`, `flyhypo-eval`). |
 
 The verification design (and why it isn't Gemini grading Gemini) is written up in
@@ -258,6 +258,40 @@ Results from neuPrint and PubMed are cached under `.flyhypo_cache/` (wipe with
 searcher is noisy for fly queries, so it's off by default).
 
 ---
+
+## MCP server
+
+The connectome engine is also an **MCP server**, so other agents (or Claude) can call
+it as tools:
+
+```bash
+uv run flyhypo-mcp          # stdio MCP server
+```
+
+Tools: **`fingerprint`** (structural, neuPrint only), **`neuron_fingerprint`** (one
+bodyId), **`replicate`** (cross-dataset motif), **`hypothesize`** (full grounded
+hypothesis; needs `GEMINI_API_KEY`). Register it with Claude Code:
+
+```bash
+claude mcp add flyhypo -- uv --directory /path/to/flyhypo run flyhypo-mcp
+```
+
+or in a client's `mcpServers` config:
+
+```json
+{
+  "mcpServers": {
+    "flyhypo": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/flyhypo", "run", "flyhypo-mcp"],
+      "env": { "NEUPRINT_APPLICATION_CREDENTIALS": "…", "GEMINI_API_KEY": "…" }
+    }
+  }
+}
+```
+
+The structure tools need only the neuPrint token; `hypothesize` also needs the Gemini
+key. Every result is a hypothesis for experimentalists, never a stated fact.
 
 ## Scope
 
