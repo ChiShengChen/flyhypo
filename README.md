@@ -48,8 +48,9 @@ heuristic, always labelled predicted.*
    + connectivity-salvage · unstudied-type humility cap · single-neuron cap
                                               │
                                               ▼
-   Hypothesis / HierarchyReport / ReplicationReport ─▶ JSON + Markdown · web UI
+   Hypothesis / HierarchyReport / ReplicationReport ─▶ JSON + Markdown · web UI · MCP server
                                               └─▶ flyhypo-batch → flyhypo-eval (gold-set scorer)
+   interfaces: CLI · web UI · MCP server (flyhypo-mcp) · batch/eval
 ```
 
 | Module | Responsibility |
